@@ -1,5 +1,12 @@
 {
   "rewrites": [
-    { "source": "/staff", "destination": "/index.html" }
+    { "source": "/staff", "destination": "/index.html" },
+    { "source": "/register", "destination": "/index.html" },
+    { "source": "/login", "destination": "/index.html" },
+    { "source": "/forgot-password", "destination": "/index.html" },
+    { "source": "/reset-password", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/remind", "schedule": "0 8 * * *" }
   ]
 }

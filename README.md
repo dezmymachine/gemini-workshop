@@ -85,8 +85,8 @@ If you later change an environment variable, redeploy (Deployments → ⋯ → R
 
 | Role | Can do |
 | --- | --- |
-| Super admin | Everything: all registrations, CSV downloads, student password-reset emails, add/edit/remove staff |
-| Organiser | All registrations, CSV downloads, student password-reset emails |
+| Super admin | Everything: all registrations, CSV downloads, session meeting links and emailing them, add/edit/remove staff |
+| Organiser | All registrations, CSV downloads, session meeting links and emailing them |
 | College coordinator | Registrations for their own college only |
 
 The database enforces these rules, so a coordinator can never load another
@@ -131,7 +131,35 @@ What the code already does to stay fast:
 
 - **Download attendee lists:** Staff portal → Registrations → **Download CSV**.
 - **A student forgot their password:** they click **Forgot your password?** on the sign-in
-  page, or staff click **Send password reset** next to the student.
+  page and get a reset link by email.
+- **Add the Google Meet link for a session:** Staff portal -> Registrations -> **View list** on the
+  session -> **Meeting link**. Paste the link and click **Save link**. Super admins and organisers only.
+- **Email the link to everyone booked on a session:** on that session's page click
+  **Email link to booked students** and confirm. You can press it again after changing a link.
+  Big classes are sent through a queue in batches of 100 with a progress bar, so nothing times out
+  (keep the page open until it says Finished). If it is interrupted, press **Resume sending**;
+  emails that failed can be sent again with **Retry failed**, and nobody is emailed twice.
+  The daily job also finishes any broadcast left half-sent.
+  Students also get a confirmation email when they book and a reminder the day before (daily job at 08:00 Ghana time).
+
+## Email setup (Resend)
+
+1. Create an account at **resend.com**, add and verify your sending domain, and create an API key.
+2. Add these in Vercel -> Settings -> Environment Variables (and in `.env` for local use), then redeploy:
+
+   | Name | Value |
+   | --- | --- |
+   | `RESEND_API_KEY` | the key from Resend |
+   | `MAIL_FROM` | for example `Gemini Workshop <workshop@yourdomain.edu.gh>` |
+   | `CRON_SECRET` | any long random text (Vercel sends it with the daily reminder job) |
+
+3. Run these two files once, in order, in the Supabase SQL Editor:
+   `supabase/migrations/002_session_links_and_emails.sql`, then `supabase/migrations/003_email_queue.sql`,
+   then `supabase/migrations/004_realtime.sql` (makes the staff tables update by themselves when someone books)
+   (a brand-new project gets these tables from `schema.sql` instead).
+
+Until `RESEND_API_KEY` and `MAIL_FROM` are set, booking still works but no emails are sent.
+Without a verified domain Resend only delivers to your own account email, which is fine for testing.
 - **See raw data:** Supabase → Table Editor → `students`, `bookings`, `staff`.
 - **Change session times or capacity:** the website's session list is defined in `index.html`
   and in the `sessions` table. Both need to match, so change them together.

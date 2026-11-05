@@ -6,6 +6,10 @@
 -- =====================================================================
 
 drop trigger if exists on_auth_user_created on auth.users;
+drop table if exists public.email_queue cascade;
+drop table if exists public.session_broadcasts cascade;
+drop table if exists public.email_log cascade;
+drop table if exists public.session_links cascade;
 drop table if exists public.bookings cascade;
 drop table if exists public.students cascade;
 drop table if exists public.staff cascade;
@@ -231,6 +235,11 @@ grant  execute on function public.book_session(text)   to authenticated;
 grant  execute on function public.cancel_booking(text) to authenticated;
 grant  execute on function public.my_staff()           to authenticated;
 
+-- The student-number -> email lookup is only used by the server (api/login.js, service role).
+-- Keeping it callable by the public would let anyone harvest students' emails.
+revoke execute on function public.login_email(text) from public, anon, authenticated;
+grant  execute on function public.login_email(text) to service_role;
+
 -- ---------- Row level security: who can read what ----------
 alter table public.colleges enable row level security;
 alter table public.sessions enable row level security;
@@ -257,6 +266,94 @@ create policy "staff read own row; super admins read all" on public.staff for se
 
 -- No insert/update/delete policies: bookings only change through book_session / cancel_booking,
 -- and staff accounts only change through the website's /api/staff function (service role).
+
+-- ---------- Meeting links and email bookkeeping ----------
+-- One meeting link (for example a Google Meet) per session. Kept in its own table because the
+-- sessions table is readable by everyone, and the link must only reach staff and booked students.
+create table public.session_links (
+  session_id text primary key references public.sessions(id) on delete cascade,
+  url        text not null check (url ~* '^https://'),
+  updated_at timestamptz not null default now()
+);
+
+-- Which automatic emails each student has already received (stops duplicates).
+create table public.email_log (
+  student_id uuid not null references public.students(user_id) on delete cascade,
+  session_id text not null references public.sessions(id) on delete cascade,
+  kind       text not null check (kind in ('confirm', 'reminder')),
+  sent_at    timestamptz not null default now(),
+  primary key (student_id, session_id, kind)
+);
+
+-- One row each time staff press "Email link to booked students".
+create table public.session_broadcasts (
+  id         bigserial primary key,
+  session_id text not null references public.sessions(id) on delete cascade,
+  sent_by    uuid references auth.users(id) on delete set null,
+  sent_at    timestamptz not null default now(),
+  sent       int not null default 0,
+  failed     int not null default 0,
+  total      int not null default 0,
+  url        text,
+  status     text not null default 'done' check (status in ('running', 'done'))
+);
+create index session_broadcasts_session_idx on public.session_broadcasts(session_id, sent_at desc);
+
+alter table public.session_links      enable row level security;
+alter table public.email_log          enable row level security;
+alter table public.session_broadcasts enable row level security;
+
+-- Students can read the link only for a session they have booked. Super admins and organisers can read all links.
+create policy "students read links of their sessions" on public.session_links for select
+  using (exists (select 1 from public.bookings b where b.student_id = (select auth.uid()) and b.session_id = session_links.session_id));
+create policy "staff read links" on public.session_links for select
+  using ((select public.my_role()) in ('super', 'organiser'));
+
+-- One row per email waiting to go out (or already sent) for a broadcast.
+create table public.email_queue (
+  id           bigserial primary key,
+  broadcast_id bigint not null references public.session_broadcasts(id) on delete cascade,
+  student_id   uuid references public.students(user_id) on delete cascade,
+  to_email     text not null,
+  name         text not null,
+  status       text not null default 'pending' check (status in ('pending', 'sending', 'sent', 'failed')),
+  attempts     int  not null default 0,
+  claimed_at   timestamptz,
+  sent_at      timestamptz
+);
+create index email_queue_progress_idx on public.email_queue(broadcast_id, status);
+alter table public.email_queue enable row level security;   -- no policies: only the server can touch it
+
+-- Takes the next batch of waiting emails for a broadcast. "skip locked" means two senders running at the
+-- same moment never pick the same email, so nobody is emailed twice. Emails stuck "sending" for over
+-- 2 minutes (a crashed sender) are picked up again, up to 3 attempts.
+create or replace function public.claim_email_batch(p_broadcast bigint, p_n int) returns setof public.email_queue
+language sql security definer set search_path = public as $$
+  update email_queue q
+     set status = 'sending', attempts = q.attempts + 1, claimed_at = now()
+   where q.id in (
+     select id from email_queue
+      where broadcast_id = p_broadcast and attempts < 3
+        and (status = 'pending' or (status = 'sending' and claimed_at < now() - interval '2 minutes'))
+      order by id limit p_n for update skip locked)
+  returning q.*;
+$$;
+revoke execute on function public.claim_email_batch(bigint, int) from public, anon, authenticated;
+grant  execute on function public.claim_email_batch(bigint, int) to service_role;
+
+-- No insert/update/delete policies anywhere: links and logs only change through the server functions (service role).
+-- email_log and session_broadcasts have no policies at all, so only the server can read them.
+
+-- ---------- Live updates for the staff portal ----------
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'bookings') then
+    alter publication supabase_realtime add table public.bookings;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'session_links') then
+    alter publication supabase_realtime add table public.session_links;
+  end if;
+end $$;
 
 -- =====================================================================
 -- FIRST SUPER ADMIN (do this once, after running everything above)

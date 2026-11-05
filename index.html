@@ -205,9 +205,28 @@ body.is-staff .topsearch{display:none}
 .auth-main{display:flex;align-items:center;justify-content:center;background:var(--bg);padding-block:40px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
 .auth-card{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:28px;display:grid;gap:20px}
 @media (max-width:480px){.auth-card{padding:20px}}
-.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:22px;padding:4px}
-.seg button{border:0;background:none;border-radius:18px;min-height:40px;font-weight:700;cursor:pointer;color:var(--muted)}
-.seg button[aria-selected="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(60,64,67,.25)}
+[hidden]{display:none!important}
+.fbar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end}
+.fsel{display:grid;gap:4px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);min-width:0}
+.fsel select{min-height:42px;border:1.5px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-weight:600;font-size:14px;letter-spacing:0;text-transform:none;color:var(--ink);max-width:100%}
+.fbar .linkbtn{font-size:14px;padding-bottom:10px}
+.livebar{margin:-10px 0 0;font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.livechip{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--muted)}
+.livechip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.livechip.live{color:var(--grasag)}.livechip.live::before{background:var(--g-green)}
+.livechip.reconnecting{color:var(--warn)}.livechip.reconnecting::before{background:var(--g-yellow)}
+.progress{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden;margin-bottom:6px}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.pager{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line);position:sticky;left:0}
+.pager .btns{gap:8px}
+.suggest{margin-top:6px;font-size:12px}
+.stepbar{display:flex;align-items:center;gap:12px}
+.steplbl{font-size:12px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted);white-space:nowrap}
+.stepbar .bar{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stepbar .bar i{height:6px;border-radius:3px;background:var(--line)}
+.stepbar .bar i.on{background:var(--accent)}
+.authswitch{margin:0;text-align:center;color:var(--muted)}
+.linkbtn{font:inherit;font-weight:700}
 .btn.wide{width:100%;justify-content:center}
 .confirm-dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:0}
 .confirm-dl dt{color:var(--muted);font-size:14px}
@@ -321,11 +340,11 @@ var BLANK=function(){ return {name:"",index:"",email:"",college:"",programme:"",
 var st = {
   mode:"connecting", portal:"student", view:"dash", counts:{}, seats:{}, admin:false, q:"", myCol:"", myPG:false, pickCol:"", pickPG:"",
   fDay:"all", fCol:"all", pick:null, form:BLANK(), booking:null, busy:false, msg:null, sheetMsg:null,
-  confirmDrop:null, h:"", staff:null, sh:"", staffList:null, staffForm:null, setupNeeded:null, owner:false,
-  auth:{fg:{email:""}, np:{pw:"",pw2:""}, tab:"in", in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, setup:{code:"",name:"",email:"",pw:"",pw2:""}, msg:null, busy:false}, find:{index:"",email:""}, adminOpen:{}, adminQ:"", gasPass:"", sheetUrl:""
+  confirmDrop:null, h:"", staff:null, sh:"", staffList:null, staffForm:null, ready:false,
+  auth:{fg:{email:""}, np:{pw:""}, tab:"in", step:1, in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, msg:null, busy:false}, find:{index:"",email:""}, adminSession:null, rq:"", pg:{}, links:{}, lastBc:{}, linkDraft:{}, confirmBroadcast:null, bcRun:null, fs:{day:"all",track:"all",status:"all"}, fr:{college:"all",level:"all",session:"all"}, live:"off", updatedAt:null, refreshing:false, rosterStale:false, adminQ:"", gasPass:"", sheetUrl:""
 };
 var API=null;
-function BLANKUP(){ return {name:"",index:"",email:"",phone:"",college:"",level:"",programme:"",pw:"",pw2:""}; }
+function BLANKUP(){ return {name:"",index:"",email:"",phone:"",college:"",level:"",programme:"",pw:""}; }
 st.auth.up=BLANKUP();
 
 /* ---------- Helpers ---------- */
@@ -390,14 +409,15 @@ function supaAPI(sb){
     var bk=await sb.from("bookings").select("session_id,kind").eq("student_id",u.id);
     var out={i:r.data.student_number,n:r.data.name,e:r.data.email,ph:r.data.phone,c:r.data.college,p:r.data.programme,l:r.data.level,s:null,g:null};
     (bk.data||[]).forEach(function(x){ if(x.kind==="grasag") out.g=x.session_id; else out.s=x.session_id; });
+    out.links={}; try{ var lk=await sb.from("session_links").select("session_id,url"); (lk.data||[]).forEach(function(x){ out.links[x.session_id]=x.url; }); }catch(e){}
     return out;
   }
   async function staffMe(){ var rows=await rpc("my_staff"); return rows && rows[0] ? rows[0] : null; }
-  var lastRefresh=0;
+  var lastRefresh=0, chan=null;
   async function refresh(){ lastRefresh=Date.now(); try{ var rows=await rpc("session_counts"); var c={}, k={}; (rows||[]).forEach(function(x){ c[x.session_id]=+x.booked; k[x.session_id]=+x.capacity; }); st.counts=c; st.caps=k; render(); }catch(e){} }
-  async function staffApi(body){
+  async function staffApi(body,path){
     var s=await sb.auth.getSession(); var t=s.data&&s.data.session&&s.data.session.access_token;
-    var r=await fetch("/api/staff",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(t||"")},body:JSON.stringify(body)});
+    var r=await fetch(path||"/api/staff",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(t||"")},body:JSON.stringify(body)});
     var j={}; try{ j=await r.json(); }catch(e){}
     if(!r.ok) throw userErr(j.error||"Something went wrong. Please try again.");
     return j;
@@ -420,9 +440,11 @@ function supaAPI(sb){
       var p=await profile(); if(!p) throw userErr("We couldn't load your registration. Please sign in."); return p;
     },
     signIn: async function(num,pw){
-      var email=await rpc("login_email",{p_num:num});
-      if(!email) throw userErr("Student number or password is incorrect.");
-      var r=await sb.auth.signInWithPassword({email:email,password:pw}); if(r.error) throw friendly(r.error);
+      /* The student number -> email lookup happens on the server (/api/login), never in the browser. */
+      var resp=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({student_number:num,password:pw})});
+      var j={}; try{ j=await resp.json(); }catch(e){}
+      if(!resp.ok) throw userErr(j.error||"Couldn't sign in right now. Please try again.");
+      var ss=await sb.auth.setSession({access_token:j.access_token,refresh_token:j.refresh_token}); if(ss.error) throw friendly(ss.error);
       var p=await profile(); if(!p){ await sb.auth.signOut(); throw userErr("Student number or password is incorrect."); }
       return p;
     },
@@ -433,9 +455,8 @@ function supaAPI(sb){
       if((f.gsid||"")!==(cur.g||"")){ if(f.gsid) await rpc("book_session",{p_session:f.gsid}); else await rpc("cancel_booking",{p_kind:"grasag"}); }
       refresh(); return profile();
     },
-    sendReset: async function(email){ var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/"}); if(r.error) throw friendly(r.error); },
+    sendReset: async function(email){ var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/reset-password"}); if(r.error) throw friendly(r.error); },
     setPassword: async function(pw){ var r=await sb.auth.updateUser({password:pw}); if(r.error) throw friendly(r.error); },
-    staffSetupNeeded: async function(){ return false; },
     staffSignIn: async function(email,pw){
       var r=await sb.auth.signInWithPassword({email:email,password:pw}); if(r.error){ var e=friendly(r.error); if(/Student number or password/.test(e.message)) e.message="Email or password is incorrect."; throw e; }
       var u=await staffMe(); if(!u){ await sb.auth.signOut(); throw userErr("This account doesn't have staff access."); }
@@ -455,15 +476,23 @@ function supaAPI(sb){
       refresh();
       return {rows:Object.keys(by).map(function(k){return by[k];}), url:""};
     },
+    watchAdmin: function(onChange,onState){
+      if(chan) return;
+      chan=sb.channel("admin-live")
+        .on("postgres_changes",{event:"*",schema:"public",table:"bookings"},function(){ onChange(); })
+        .on("postgres_changes",{event:"*",schema:"public",table:"session_links"},function(){ onChange(); })
+        .subscribe(function(status){ onState(status); });
+    },
+    unwatchAdmin: function(){ if(chan){ try{ sb.removeChannel(chan); }catch(e){} chan=null; } },
+    staffSessions: function(){ return staffApi({action:"list"},"/api/sessions"); },
+    setLink: function(sid,url){ return staffApi({action:"setLink",session_id:sid,url:url},"/api/sessions"); },
+    broadcastStart: function(sid){ return staffApi({action:"start",session_id:sid},"/api/broadcast"); },
+    broadcastProcess: function(id){ return staffApi({action:"process",id:id},"/api/broadcast"); },
+    broadcastRetry: function(id){ return staffApi({action:"retry",id:id},"/api/broadcast"); },
+    notify: async function(){ try{ await staffApi({},"/api/notify"); }catch(e){} },     /* emails the booking confirmation; never blocks booking */
     listStaff: async function(){ var j=await staffApi({action:"list"}); return (j.staff||[]).map(function(u){ return {user_id:u.user_id,email:u.email,name:u.name,role:u.role,college:u.college||""}; }); },
     saveStaff: async function(a,u){ var ex=(st.staffList||[]).filter(function(x){return normEmail(x.email)===normEmail(u.email);})[0]; await staffApi({action:"save",user:{user_id:ex&&ex.user_id||null,name:u.name,email:u.email,role:u.role,college:u.college,password:u.h||""}}); },
     deleteStaff: async function(a,email){ var ex=(st.staffList||[]).filter(function(x){return normEmail(x.email)===normEmail(email);})[0]; if(!ex) throw userErr("Staff member not found."); await staffApi({action:"delete",user_id:ex.user_id}); },
-    resetStudent: async function(a,key){
-      var email=null; Object.keys(st.seats).some(function(sid){ var seats=st.seats[sid]||{}; var r=seats[key]; if(r){ email=r.e; return true; } return false; });
-      if(!email) throw userErr("Couldn't find that student's email.");
-      var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/"}); if(r.error) throw friendly(r.error);
-      return email;
-    },
     download: async function(name,csv){
       var url=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}));
       var a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },2000);
@@ -612,7 +641,8 @@ function bookedCard(sid){
   if(st.confirmDrop===sid){
     h+='<span style="color:var(--full);font-weight:700">Give up this seat? It goes to another student.</span><div class="btns"><button class="btn danger sm" data-act="doDrop" data-sid="'+sid+'"'+(st.busy?' disabled':'')+'>'+(st.busy?'Releasing…':'Yes, release it')+'</button><button class="btn sm" data-act="noDrop">Keep it</button></div>';
   } else {
-    h+='<span class="muted" style="font-size:14px">Sign in to your student Google account before the session.</span><div class="btns"><button class="btn sm" data-act="change" data-sid="'+sid+'">Change session</button><button class="btn danger sm" data-act="askDrop" data-sid="'+sid+'">Cancel</button></div>';
+    var jl=st.booking&&st.booking.links&&st.booking.links[sid]; jl=jl&&/^https:\/\//i.test(jl)?jl:"";
+    h+='<span class="muted" style="font-size:14px">Sign in to your student Google account before the session.</span><div class="btns">'+(jl?'<a class="btn primary sm" href="'+esc(jl)+'" target="_blank" rel="noopener noreferrer">Join session</a>':'')+'<button class="btn sm" data-act="change" data-sid="'+sid+'">Change session</button><button class="btn danger sm" data-act="askDrop" data-sid="'+sid+'">Cancel</button></div>';
   }
   return h+'</div></div></article>';
 }
@@ -625,7 +655,7 @@ function renderMine(){
       '<div class="span2 btns"><button class="btn primary" type="submit"'+(st.busy?' disabled':'')+'>'+(st.busy?'Searching…':'Find my booking')+'</button><span class="muted">Not registered yet? <button type="button" class="linkbtn" data-act="toList">Browse sessions</button></span></div></form>';
   }
   var ini=String(b.n||"?").trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
-  h+='<div class="sec-head"><div><h2>My Sessions</h2><p>The joining link for each session will be shared by the organisers.</p></div></div>';
+  h+='<div class="sec-head"><div><h2>My Sessions</h2><p>Your joining link appears on each session once the organisers add it. We also email it to you.</p></div></div>';
   h+='<div class="dash"><aside class="profile panel"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div><h3>'+esc(b.n)+'</h3><span class="muted">'+esc(b.l)+'</span></div>'+
     '<dl><div><dt>Student number</dt><dd class="mono">'+esc(b.i)+'</dd></div><div><dt>Email</dt><dd>'+esc(b.e)+'</dd></div><div><dt>Phone</dt><dd class="mono">'+esc(b.ph||'—')+'</dd></div><div><dt>College</dt><dd>'+esc(collegeName(b.c))+'</dd></div><div><dt>Programme</dt><dd>'+esc(b.p)+'</dd></div></dl>'+
     '<button class="linkbtn" data-act="signOut" style="justify-self:start">Not you? Sign out</button></aside><section class="list" style="min-width:0">';
@@ -666,6 +696,59 @@ function renderSheet(){
   h+=msgHTML(st.sheetMsg);
   return h+'<div class="btns"><button class="btn primary" data-act="confirmBook"'+(st.busy?' disabled':'')+'>'+(st.busy?'Saving…':'Confirm booking')+'</button><button class="btn" data-act="close">Back to sessions</button></div></div></div>';
 }
+/* ---------- Filters (staff tables) ---------- */
+function selHTML(key,label,opts,val){
+  return '<label class="fsel"><span>'+esc(label)+'</span><select data-flt="'+key+'" id="flt.'+key+'">'+opts.map(function(o){ return '<option value="'+esc(o[0])+'"'+(String(val)===String(o[0])?' selected':'')+'>'+esc(o[1])+'</option>'; }).join("")+'</select></label>';
+}
+function fsActive(){ var f=st.fs; return f.day!=="all"||f.track!=="all"||f.status!=="all"; }
+function frActive(){ var f=st.fr; return f.college!=="all"||f.level!=="all"||f.session!=="all"; }
+function filterSessions(list){
+  var f=st.fs, coord=st.staff && st.staff.role==="coord";
+  return list.filter(function(s){
+    if(f.day!=="all" && s.day!==f.day) return false;
+    if(f.track!=="all" && s.track!==f.track) return false;
+    if(f.status==="open" && left(s.id)===0) return false;
+    if(f.status==="full" && left(s.id)>0) return false;
+    if(!coord && f.status==="nolink" && st.links[s.id]) return false;
+    if(!coord && f.status==="haslink" && !st.links[s.id]) return false;
+    return true;
+  });
+}
+function fsBar(sess){
+  var coord=st.staff && st.staff.role==="coord", seen={}, tracks=[["all","All colleges / tracks"]];
+  sess.forEach(function(s){ if(!seen[s.track]){ seen[s.track]=1; tracks.push([s.track, TRACKS[s.track].code+(s.g?" · "+DAYS[s.day].short:"")]); } });
+  var status=[["all","Any status"],["open","Open"],["full","Full"]]; if(!coord) status.push(["nolink","No link yet"],["haslink","Link set"]);
+  return '<div class="fbar" role="group" aria-label="Filter sessions">'+
+    selHTML("fs.day","Day",[["all","All days"]].concat(DAY_ORDER.map(function(d){ return [d,DAYS[d].short]; })),st.fs.day)+
+    selHTML("fs.track","College / track",tracks,st.fs.track)+selHTML("fs.status","Status",status,st.fs.status)+
+    (fsActive()?'<button type="button" class="linkbtn" data-act="clearFilters" data-set="fs">Clear filters</button>':'')+'</div>';
+}
+function levelOk(l,v){ return v==="all" || (v==="ug"?!isPG(l):v==="pg"?isPG(l):l===v); }
+function frApply(list){ var f=st.fr; return list.filter(function(x){ return (f.college==="all"||x.r.c===f.college) && levelOk(x.r.l,f.level) && (f.session==="all"||x.sid===f.session); }); }
+function frBar(list,withSession){
+  var cols={}, lvls={}, sids={}; list.forEach(function(x){ cols[x.r.c]=1; lvls[x.r.l]=1; sids[x.sid]=1; });
+  var colOpts=[["all","All colleges"]].concat(Object.keys(cols).sort().map(function(c){ return [c,c]; }));
+  var lvlOpts=[["all","All levels"],["ug","Undergraduate (all)"],["pg","Postgraduate (all)"]].concat(LEVELS.filter(function(l){ return lvls[l]; }).map(function(l){ return [l,l]; }));
+  var h='<div class="fbar" role="group" aria-label="Filter students">'+selHTML("fr.college","College",colOpts,st.fr.college)+selHTML("fr.level","Level",lvlOpts,st.fr.level);
+  if(withSession) h+=selHTML("fr.session","Session",[["all","All sessions"]].concat(SESSIONS.filter(function(s){ return sids[s.id]; }).map(function(s){ return [s.id,longLabel(s)]; })),st.fr.session);
+  return h+(frActive()?'<button type="button" class="linkbtn" data-act="clearFilters" data-set="fr">Clear filters</button>':'')+'</div>';
+}
+
+/* ---------- Pagination (staff tables) ---------- */
+var PAGE_PEOPLE=25, PAGE_SESSIONS=15, PAGE_STAFF=15;
+function pageSlice(key,list,size){
+  var pages=Math.max(1,Math.ceil(list.length/size)), p=Math.min(Math.max(1,st.pg[key]||1),pages); st.pg[key]=p;
+  return {items:list.slice((p-1)*size,p*size), page:p, pages:pages, from:list.length?(p-1)*size+1:0, to:Math.min(p*size,list.length), total:list.length};
+}
+function pagerHTML(key,pg){
+  if(pg.pages<=1) return pg.total?'<div class="pager"><span class="muted">Showing all '+pg.total+'</span></div>':'';
+  return '<div class="pager"><span class="muted">Showing '+pg.from+'–'+pg.to+' of '+pg.total+'</span><div class="btns">'+
+    '<button class="btn sm" data-act="pg" data-key="'+key+'" data-to="'+(pg.page-1)+'"'+(pg.page<=1?' disabled':'')+'>Previous</button>'+
+    '<span class="mono" style="font-size:14px">Page '+pg.page+' of '+pg.pages+'</span>'+
+    '<button class="btn sm" data-act="pg" data-key="'+key+'" data-to="'+(pg.page+1)+'"'+(pg.page>=pg.pages?' disabled':'')+'>Next</button></div></div>';
+}
+function qsSession(){ var m=/[?&]session=([^&]+)/.exec(location.search); var id=m?decodeURIComponent(m[1]):null; return id && BY_ID[id] ? id : null; }
+
 function scopeSessions(){
   if(st.staff && st.staff.role==="coord"){ var t=trackOf(st.staff.college); return SESSIONS.filter(function(s){ return s.track===t || s.g; }); }
   return SESSIONS;
@@ -676,45 +759,114 @@ function allRows(){
   return rows;
 }
 function renderAdmin(){
+  if(st.adminSession && scopeSessions().some(function(s){ return s.id===st.adminSession; })) return renderSessionPage(st.adminSession);
   var h=msgHTML(), role=st.staff.role, rows=allRows(), sess=scopeSessions();
   var by={}; rows.forEach(function(x){ by[x.sid]=(by[x.sid]||0)+1; });
   var people={}; rows.forEach(function(x){ people[normIndex(x.r.i)]=1; });
   var q=st.adminQ.trim().toLowerCase();
   h+='<div class="sec-head"><div><h2>Registrations</h2><p>'+(role==="coord"?'Students from '+esc(collegeName(st.staff.college))+'.':'All colleges and GRASAG.')+'</p></div></div>';
   h+='<section class="stats" aria-label="Summary"><div class="stat"><span class="ic a">'+ICON.users.replace(/width="18" height="18"/,'width="20" height="20"')+'</span><span class="lb">Students with a seat</span><span class="vl">'+Object.keys(people).length+'</span></div>'+
-    '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Seats booked</span><span class="vl">'+rows.length+'</span></div>'+
+    '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Seats booked</span><span class="vl">'+(role==="coord"?rows.length:sess.reduce(function(n,s){ return n+count(s.id); },0))+'</span></div>'+
     '<div class="stat"><span class="ic">'+ICON.seat+'</span><span class="lb">Full sessions</span><span class="vl">'+sess.filter(function(s){return left(s.id)===0;}).length+'</span><span class="sub">of '+sess.length+' sessions</span></div></section>';
-  h+='<div class="toolbar"><div class="field"><label for="adminQ">Search students</label><input id="adminQ" type="search" value="'+esc(st.adminQ)+'" placeholder="Name, student number, email or phone"></div><div class="btns">';
+  h+='<div class="toolbar"><div class="field"><label for="adminQ">Search students</label><input id="adminQ" type="search" value="'+esc(st.adminQ)+'" placeholder="Name, student number, email, phone or programme"></div><div class="btns">';
   if(API && API.canDownload) h+='<button class="btn" data-act="csv">Download CSV</button>';
   if(st.sheetUrl && role!=="coord") h+='<a class="btn" href="'+esc(st.sheetUrl)+'" target="_blank" rel="noopener">Open Google Sheet</a>';
-  if(API && API.gas) h+='<button class="btn" data-act="gasReload">Refresh</button>';
-  h+='</div></div>';
+  if(API && API.gas) h+='<button class="btn" data-act="gasReload"'+(st.refreshing?' disabled':'')+'>'+(st.refreshing?'Refreshing…':'Refresh')+'</button>';
+  h+='</div></div>'+liveChip();
   if(q){
-    var hits=rows.filter(function(x){ return [x.r.n,x.r.i,x.r.e,x.r.ph].join(" ").toLowerCase().indexOf(q)>=0; });
-    return h+'<div class="sched panel" style="padding:0">'+rosterTable(hits,true)+'</div>';
+    var hits=rows.filter(function(x){ return [x.r.n,x.r.i,x.r.e,x.r.ph,x.r.p].join(" ").toLowerCase().indexOf(q)>=0; });
+    return h+frBar(hits,true)+'<div class="sched panel" style="padding:0">'+rosterTable(frApply(hits),true,"search")+'</div>';
   }
-  h+='<div class="sched panel" style="padding:0"><table class="admin-table"><thead><tr><th>Day</th><th>Track</th><th>Session</th><th class="num">'+(role==="coord"?'Your students':'Booked')+'</th><th class="num">Seats left</th><th></th></tr></thead><tbody>';
-  sess.forEach(function(s){
-    var open=!!st.adminOpen[s.id], l=left(s.id);
-    h+='<tr><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+'</td><td class="num mono">'+(by[s.id]||0)+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
-      '<td><button class="linkbtn" data-act="toggle" data-sid="'+s.id+'" aria-expanded="'+open+'">'+(open?'Hide list':'View list')+'</button></td></tr>';
-    if(open){ var list=rows.filter(function(x){return x.sid===s.id;}); h+='<tr class="roster"><td colspan="6">'+(list.length?rosterTable(list,false):'<div class="empty">No one has booked this session yet.</div>')+'</td></tr>'; }
+  var fsess=filterSessions(sess), sp=pageSlice("sessions",fsess,PAGE_SESSIONS);
+  h+=fsBar(sess);
+  h+='<div class="sched panel" style="padding:0"><table class="admin-table"><thead><tr><th>Day</th><th>Track</th><th>Session</th><th class="num">'+(role==="coord"?'Your students':'Booked')+'</th><th class="num">Seats left</th>'+(role==="coord"?'':'<th>Link</th>')+'<th></th></tr></thead><tbody>';
+  sp.items.forEach(function(s){
+    var l=left(s.id);
+    h+='<tr><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+'</td><td class="num mono">'+(role==="coord"?(by[s.id]||0):count(s.id))+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
+      (role==="coord"?'':'<td>'+(st.links&&st.links[s.id]?'<span class="pill">Link set</span>':'<span class="pill plain">No link</span>')+'</td>')+
+      '<td><a class="linkbtn" href="/staff?session='+encodeURIComponent(s.id)+'" data-act="openSession" data-sid="'+s.id+'">View list</a></td></tr>';
   });
-  return h+'</tbody></table></div>';
+  if(!sp.items.length) h+='<tr><td colspan="'+(role==="coord"?6:7)+'"><div class="empty" style="border:0">No sessions match these filters.</div></td></tr>';
+  return h+'</tbody></table>'+pagerHTML("sessions",sp)+'</div>';
 }
-function rosterTable(rows,withSession){
+function linkPanel(sid,rows){
+  var cur=(st.links||{})[sid]||"", draft=st.linkDraft[sid]!=null?st.linkDraft[sid]:cur, last=(st.lastBc||{})[sid], n=rows.length;
+  var ask=st.confirmBroadcast===sid, sending=st.bcRun===sid, anyBusy=st.busy||!!st.bcRun;
+  var interrupted=last && last.status==="running" && !sending, failedN=last && last.status==="done" && last.failed>0;
+  var h='<form id="linkForm" class="panel" novalidate style="display:grid;gap:12px"><div style="display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between"><h3>Meeting link</h3><span class="pill'+(cur?'':' plain')+'">'+(cur?'Link set':'No link yet')+'</span></div>';
+  if(st.linksErr) h+='<div class="notice err">Couldn\'t load saved links: '+esc(st.linksErr)+'</div>';
+  h+='<div class="field"><label for="linkUrl">Google Meet link</label><input id="linkUrl" type="url" inputmode="url" value="'+esc(draft)+'" placeholder="https://meet.google.com/abc-defg-hij" autocomplete="off"></div>'+
+    '<div class="btns"><button class="btn primary" type="submit"'+(anyBusy?' disabled':'')+'>'+(st.busy&&!ask?'Saving…':'Save link')+'</button>';
+  if(sending) h+='';
+  else if(interrupted) h+='<button type="button" class="btn primary" data-act="resumeBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Resume sending</button>';
+  else if(ask) h+='<span style="font-weight:700">Email the link to '+n+' student'+(n===1?'':'s')+'?</span><button type="button" class="btn primary sm" data-act="doBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Yes, send now</button><button type="button" class="btn sm" data-act="noBroadcast">Cancel</button>';
+  else h+='<button type="button" class="btn" data-act="askBroadcast" data-sid="'+esc(sid)+'"'+((!cur||!n||draft.trim()!==cur||anyBusy)?' disabled':'')+'>Email link to booked students</button>';
+  if(failedN && !sending && !ask) h+='<button type="button" class="btn" data-act="retryBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Retry '+last.failed+' failed</button>';
+  h+='</div>';
+  if(last && (sending || interrupted)){
+    var done=last.sent+last.failed, pct=last.total?Math.round(done*100/last.total):0;
+    h+='<div><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="'+last.total+'" aria-valuenow="'+done+'"><i style="width:'+pct+'%"></i></div>'+
+      '<span style="font-size:14px">'+(sending?'Sending in batches of 100. Sent '+last.sent+' of '+last.total+(last.failed?' ('+last.failed+' failed)':'')+'. Keep this page open.':'Sending was interrupted: '+last.sent+' of '+last.total+' sent. Resume to send the rest.')+'</span></div>';
+  } else {
+    if(last) h+='<span class="muted" style="font-size:14px">Last emailed '+esc(new Date(last.at).toLocaleString("en-GB",{timeZone:"UTC",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))+' (Ghana time): '+last.sent+' of '+last.total+' sent'+(last.failed?', '+last.failed+' failed':'')+'.</span>';
+  }
+  return h+'</form>';
+}
+/* Sends a broadcast one batch at a time (the server sends 100 per call) and shows live progress. */
+async function runBroadcast(sid,b){
+  var keep=function(x){ st.lastBc[sid]={id:x.id,at:x.at||new Date().toISOString(),total:x.total,sent:x.sent,failed:x.failed,status:x.status}; };
+  st.bcRun=sid; st.msg=null; st.confirmBroadcast=null; keep(b); render();
+  var prev=-1, stall=0, first=true;
+  try{
+    while(b.status==="running" && st.staff){
+      if(!first) await sleep(700); first=false;              /* gentle pace: stays under the email service's rate limit */
+      b=await API.broadcastProcess(b.id); keep(b); render();
+      var d=b.sent+b.failed; stall = d===prev ? stall+1 : 0; prev=d; if(stall>=5) break;
+    }
+    if(b.status==="done") st.msg={err:b.sent===0,text:"Finished: "+b.sent+" of "+b.total+" student"+(b.total===1?"":"s")+" emailed."+(b.failed?" "+b.failed+" could not be sent. Use Retry to try them again.":"")};
+    else st.msg={err:true,text:"Sending paused at "+b.sent+" of "+b.total+". Press Resume sending to continue."};
+  }catch(err){ st.msg={err:true,text:err.message+" Press Resume sending to continue."}; }
+  st.bcRun=null; render(); window.scrollTo(0,0);
+}
+async function submitLink(){
+  if(st.busy||!st.adminSession) return;
+  var sid=st.adminSession, v=String(st.linkDraft[sid]!=null?st.linkDraft[sid]:((st.links||{})[sid]||"")).trim();
+  if(v && !/^https:\/\/\S+$/i.test(v)){ st.msg={err:true,text:"Enter a full link starting with https:// (for example https://meet.google.com/abc-defg-hij)."}; render(); window.scrollTo(0,0); return; }
+  st.busy=true; st.msg=null; render();
+  try{ var r=await API.setLink(sid,v); if(r.url) st.links[sid]=r.url; else delete st.links[sid]; delete st.linkDraft[sid]; st.msg={text:v?"Link saved.":"Link removed."}; }
+  catch(err){ st.msg={err:true,text:err.message}; }
+  st.busy=false; render(); window.scrollTo(0,0);
+}
+/* One session on its own page: stats, search and a paginated list of the students who booked it. */
+function renderSessionPage(sid){
+  var s=BY_ID[sid], t=TRACKS[s.track], role=st.staff.role, id=encodeURIComponent(sid);
+  var rows=allRows().filter(function(x){ return x.sid===sid; }), q=(st.rq||"").trim().toLowerCase();
+  var shown=q?rows.filter(function(x){ return [x.r.n,x.r.i,x.r.e,x.r.ph,x.r.p].join(" ").toLowerCase().indexOf(q)>=0; }):rows;
+  var l=left(sid);
+  var h=msgHTML()+'<p style="margin:0"><a class="linkbtn" href="/staff" data-act="closeSession">← All sessions</a></p>'+
+    '<div class="sec-head"><div><h2>'+esc(t.code)+' · '+esc(s.title)+'</h2><p>'+esc(DAYS[s.day].date)+', '+esc(s.time)+' (Ghana time). '+esc(t.label)+'.</p></div></div>'+
+    '<section class="stats" aria-label="Summary"><div class="stat"><span class="ic a">'+ICON.users.replace(/width="18" height="18"/,'width="20" height="20"')+'</span><span class="lb">'+(role==="coord"?'Your students booked':'Students booked')+'</span><span class="vl">'+rows.length+'</span></div>'+
+    '<div class="stat"><span class="ic">'+ICON.seat+'</span><span class="lb">Seats left</span><span class="vl">'+l+'</span><span class="sub">of '+cap(sid)+' seats</span></div>'+
+    '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Status</span><span class="vl" style="font-size:24px">'+(l===0?'Full':'Open')+'</span></div></section>'+
+    (role==="coord"?'':linkPanel(sid,rows))+
+    '<div class="toolbar"><div class="field"><label for="rQ">Search this list</label><input id="rQ" type="search" value="'+esc(st.rq||"")+'" placeholder="Name, student number, email, phone or programme"></div></div>'+
+    (rows.length?frBar(shown,false):'')+
+    '<div class="sched panel" style="padding:0">'+(rows.length?rosterTable(frApply(shown),false,"roster"):'<div class="empty">No one has booked this session yet.</div>')+'</div>';
+  return h;
+}
+function rosterTable(rows,withSession,key){
   if(!rows.length) return '<div class="empty">No matching registrations.</div>';
-  var canReset = st.staff && st.staff.role!=="coord";
-  rows.sort(function(a,b){ return String(a.r.n).localeCompare(String(b.r.n)); });
-  return '<table><thead><tr><th>Name</th><th>Student no.</th><th>Email</th><th>Phone</th><th>College</th><th>Programme</th><th>Level</th>'+(withSession?'<th>Session</th>':'')+(canReset?'<th></th>':'')+'</tr></thead><tbody>'+
+  rows=rows.slice().sort(function(a,b){ return String(a.r.n).localeCompare(String(b.r.n)); });
+  var pg=pageSlice(key||"roster",rows,PAGE_PEOPLE); rows=pg.items;
+  return '<table><thead><tr><th>Name</th><th>Student no.</th><th>Email</th><th>Phone</th><th>College</th><th>Programme</th><th>Level</th>'+(withSession?'<th>Session</th>':'')+'</tr></thead><tbody>'+
     rows.map(function(x){ var k=normIndex(x.r.i); return '<tr><td>'+esc(x.r.n)+'</td><td class="mono">'+esc(x.r.i)+'</td><td>'+esc(x.r.e)+'</td><td class="mono">'+esc(x.r.ph||'')+'</td><td>'+esc(x.r.c)+'</td><td>'+esc(x.r.p)+'</td><td>'+esc(x.r.l)+'</td>'+(withSession?'<td>'+esc(longLabel(BY_ID[x.sid]))+'</td>':'')+
-      (canReset?'<td>'+(st.resetDone===k?'<span class="pill">Email sent</span>':'<button class="linkbtn" data-act="resetPw" data-key="'+esc(k)+'">Send password reset</button>')+'</td>':'')+'</tr>'; }).join("")+'</tbody></table>';
+      '</tr>'; }).join("")+'</tbody></table>'+pagerHTML(key||"roster",pg);
 }
 function renderUsers(){
   var h=msgHTML();
   h+='<div class="sec-head"><div><h2>Staff &amp; roles</h2><p>Create staff accounts and choose what each person can see.</p></div><button class="btn primary sm" data-act="newStaff">Add staff member</button></div>';
-  h+='<div class="stats"><div class="stat"><span class="lb"><b>Super admin</b></span><span class="sub">Sees everything, manages staff accounts and roles, sends student password resets.</span></div>'+
-    '<div class="stat"><span class="lb"><b>Organiser</b></span><span class="sub">Sees every college\'s registrations, downloads lists, sends student password resets.</span></div>'+
+  h+='<div class="stats"><div class="stat"><span class="lb"><b>Super admin</b></span><span class="sub">Sees everything, manages staff accounts and roles, sets session links and emails them to students.</span></div>'+
+    '<div class="stat"><span class="lb"><b>Organiser</b></span><span class="sub">Sees every college\'s registrations, downloads lists, sets session links and emails them to students.</span></div>'+
     '<div class="stat"><span class="lb"><b>College coordinator</b></span><span class="sub">Sees only the students from their own college.</span></div></div>';
   var F=st.staffForm;
   if(F){
@@ -726,17 +878,31 @@ function renderUsers(){
       '<div class="span2 btns"><button class="btn primary" type="submit"'+(st.busy?' disabled':'')+'>'+(st.busy?'Saving…':'Save')+'</button><button type="button" class="btn" data-act="cancelStaff">Cancel</button></div></form>';
   }
   if(st.staffList===null) return h+'<div class="empty">Loading staff…</div>';
+  var stp=pageSlice("staff",st.staffList.slice().sort(function(a,b){return String(a.name).localeCompare(String(b.name));}),PAGE_STAFF);
   h+='<div class="sched panel" style="padding:0"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>College</th><th></th></tr></thead><tbody>'+
-    st.staffList.slice().sort(function(a,b){return String(a.name).localeCompare(String(b.name));}).map(function(u){
+    stp.items.map(function(u){
       var me=normEmail(u.email)===normEmail(st.staff.email);
       return '<tr><td>'+esc(u.name)+(me?' <span class="pill plain">You</span>':'')+'</td><td>'+esc(u.email)+'</td><td><span class="pill'+(u.role==="super"?'':u.role==="organiser"?' g':' plain')+'">'+esc(ROLES[u.role]||u.role)+'</span></td><td>'+esc(u.college?collegeName(u.college):'—')+'</td>'+
         '<td><div class="btns"><button class="linkbtn" data-act="editStaff" data-email="'+esc(u.email)+'">Edit</button>'+(me?'':(st.confirmStaff===u.email?'<button class="btn danger sm" data-act="delStaff" data-email="'+esc(u.email)+'">Confirm remove</button>':'<button class="linkbtn" data-act="askDelStaff" data-email="'+esc(u.email)+'">Remove</button>'))+'</div></td></tr>';
-    }).join("")+'</tbody></table></div>';
+    }).join("")+'</tbody></table>'+pagerHTML("staff",stp)+'</div>';
   return h;
 }
 function sfield(k,label,type,val,attrs){ return '<div class="field"><label for="sf.'+k+'">'+label+'</label>'+pwBox(type,'<input id="sf.'+k+'" data-sf="'+k+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>')+'</div>'; }
 
 /* ---------- Sign-in / create account ---------- */
+var AUTH_PATH={in:"/login",up:"/register",forgot:"/forgot-password",newpw:"/reset-password"};
+function authLink(tab,text){ return '<a class="linkbtn" href="'+AUTH_PATH[tab]+'" data-act="authTab" data-tab="'+tab+'">'+text+'</a>'; }
+function routeTab(p){ p=String(p||"").replace(/\/+$/,"").toLowerCase(); for(var k in AUTH_PATH){ if(AUTH_PATH[k]===p) return k; } return null; }
+/* Keeps the address bar in step with the screen: signed-out visitors always sit on /login, /register, etc.;
+   signed-in students are moved off those pages to "/". Waits until the saved session has been checked. */
+function syncUrl(authOn){
+  if(!st.ready || st.portal==="staff") return;
+  var p=location.pathname.replace(/\/+$/,"")||"/";
+  try{
+    if(authOn){ var want=AUTH_PATH[st.auth.tab]; if(want && p!==want) history.replaceState(null,"",want); }
+    else if(routeTab(p)) history.replaceState(null,"","/");
+  }catch(e){}
+}
 function authHTML(){
   var A=st.auth, up=A.up, inn=A.in;
   A.tab = st.portal==="staff" ? "staff" : (A.tab==="staff" ? "in" : A.tab);
@@ -744,42 +910,27 @@ function authHTML(){
     (st.portal==="staff"
       ? '<div style="display:grid;gap:14px"><span class="eyebrow" style="color:var(--hero-muted)">Staff portal</span><h1>Gemini &amp; Google Workspace Workshop</h1><p>For super admins, organisers and college coordinators managing workshop registrations.</p>'+
         '<ul class="ticks"><li>See registrations and seat counts live</li><li>Download attendee lists</li><li>Manage staff accounts and roles</li></ul></div>'
-      : '<div style="display:grid;gap:14px"><h1>Gemini &amp; Google Workspace Workshop</h1><p>Live 90-minute online sessions on using Gemini in Docs, Sheets, Slides, Forms and Colab for your coursework, responsibly.</p>'+
-        '<ul class="ticks"><li>Register with your student number</li><li>See only the sessions for your college</li><li>Choose a session and save your seat. 400 seats per session</li></ul></div>')+
+      : '<div style="display:grid;gap:14px"><h1>Gemini &amp; Google Workspace Workshop</h1></div>')+
     '<span aria-hidden="true"></span></section>';
-  h+='<section class="auth-main"><div class="auth-card">'+modeNotice()+
-    '<div class="seg" role="tablist" aria-label="Sign in or register"><button role="tab" data-act="authTab" data-tab="in" aria-selected="'+(A.tab==="in")+'">Sign in</button><button role="tab" data-act="authTab" data-tab="up" aria-selected="'+(A.tab==="up")+'">Register</button></div>'+msgHTML(A.msg);
+  h+='<section class="auth-main"><div class="auth-card">'+modeNotice()+msgHTML(A.msg);
   if(A.tab==="staff"){
-    h=h.replace(/<div class="seg"[\s\S]*?<\/div>/,'');
-    if(st.setupNeeded===null){ h+='<div class="empty">Checking staff accounts…</div>'; }
-    else if(st.setupNeeded){
-      var S=A.setup;
-      h+='<div><h2>Set up the super admin</h2><p class="muted" style="margin:6px 0 0">No staff accounts exist yet. Create the first super admin, who can then add other staff.</p></div>';
-      if(!(API && (API.gas || API.preview)) && !st.owner) h+='<div class="notice">Only the owner of this site can create the first super admin.</div>';
-      else h+='<form id="setupForm" class="grid" novalidate>'+(API&&API.gas?'<div class="span2">'+afield("setup.code","Setup passcode","password",S.code,'required','The ADMIN_PASSCODE set in Apps Script')+'</div>':'')+
-        '<div class="span2">'+afield("setup.name","Full name","text",S.name,'required')+'</div><div class="span2">'+afield("setup.email","Email","email",S.email,'autocomplete="username" required')+'</div>'+
-        afield("setup.pw","Password","password",S.pw,'autocomplete="new-password" placeholder="At least 6 characters" required')+afield("setup.pw2","Confirm password","password",S.pw2,'autocomplete="new-password" required')+
-        '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>Create super admin</button></div></form>';
-    } else {
-      h+='<div><h2>Staff sign in</h2><p class="muted" style="margin:6px 0 0">For organisers, coordinators and administrators.</p></div>'+
-        '<form id="staffIn" class="grid" novalidate><div class="span2">'+afield("st.email","Email","email",A.st.email,'autocomplete="username" required')+'</div>'+
-        '<div class="span2">'+afield("st.pw","Password","password",A.st.pw,'autocomplete="current-password" required')+'</div>'+
-        '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Signing in…':'Sign in')+'</button></div></form>';
-    }
+    h+='<div><h2>Staff sign in</h2><p class="muted" style="margin:6px 0 0">For organisers, coordinators and administrators.</p></div>'+
+      '<form id="staffIn" class="grid" novalidate><div class="span2">'+afield("st.email","Email","email",A.st.email,'autocomplete="username" required')+'</div>'+
+      '<div class="span2">'+afield("st.pw","Password","password",A.st.pw,'autocomplete="current-password" required')+'</div>'+
+      '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Signing in…':'Sign in')+'</button></div></form>';
     return h+'</div></section></div>';
   }
   if(A.tab==="forgot"||A.tab==="newpw"){
-    h=h.replace(/<div class="seg"[\s\S]*?<\/div>/,'');
     if(A.tab==="forgot"){
       h+='<div><h2>Reset your password</h2><p class="muted" style="margin:6px 0 0">Enter the email you registered with. We\'ll send you a link to choose a new password.</p></div>'+
         '<form id="forgotForm" class="grid" novalidate><div class="span2">'+afield("fg.email","Email","email",(A.fg&&A.fg.email)||"",'autocomplete="email" required')+'</div>'+
         '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Sending…':'Send reset link')+'</button></div></form>';
     } else {
       h+='<div><h2>Choose a new password</h2><p class="muted" style="margin:6px 0 0">Enter your new password twice.</p></div>'+
-        '<form id="newpwForm" class="grid" novalidate>'+afield("np.pw","New password","password",(A.np&&A.np.pw)||"",'autocomplete="new-password" placeholder="At least 6 characters" required')+afield("np.pw2","Confirm password","password",(A.np&&A.np.pw2)||"",'autocomplete="new-password" required')+
+        '<form id="newpwForm" class="grid" novalidate>'+pwSuggest("np.pw","New password",(A.np&&A.np.pw)||"")+
         '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Saving…':'Save new password')+'</button></div></form>';
     }
-    h+='<p style="margin:0"><button class="linkbtn" data-act="authTab" data-tab="in">Back to sign in</button></p>';
+    h+='<p style="margin:0">'+authLink("in","Back to sign in")+'</p>';
     return h+'</div></section></div>';
   }
   if(A.tab==="in"){
@@ -787,31 +938,53 @@ function authHTML(){
       '<form id="inForm" class="grid" novalidate><div class="span2">'+afield("in.index","Student number","text",inn.index,'inputmode="numeric" autocomplete="username" required')+'</div>'+
       '<div class="span2">'+afield("in.pw","Password","password",inn.pw,'autocomplete="current-password" required')+'</div>'+
       '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Signing in…':'Sign in')+'</button></div>'+
-      '<p class="span2" style="margin:0;font-size:14px"><button type="button" class="linkbtn" data-act="authTab" data-tab="forgot">Forgot your password?</button></p></form>'+
-      '<p style="margin:0">New here? <button class="linkbtn" data-act="authTab" data-tab="up">Register</button></p>';
+      '<p class="span2" style="margin:0;font-size:14px">'+authLink("forgot","Forgot your password?")+'</p></form>'+
+      '<p class="authswitch">New here? '+authLink("up","Create an account")+'</p>';
   } else {
-    h+='<div><h2>Register</h2><p class="muted" style="margin:6px 0 0">You\'ll choose your session right after this.</p></div>'+
+    var step=A.step===2?2:1;
+    h+='<div class="stepbar" role="group" aria-label="Step '+step+' of 2"><span class="steplbl">Step '+step+' of 2</span><span class="bar" aria-hidden="true"><i class="on"></i><i class="'+(step===2?'on':'')+'"></i></span></div>'+
+      (step===1
+        ? '<div><h2>Create your account</h2><p class="muted" style="margin:6px 0 0">Already have an account? '+authLink("in","Sign in")+'</p></div>'
+        : '<div><h2>Your studies</h2><p class="muted" style="margin:6px 0 0">Almost done. You\'ll choose your session right after this.</p></div>')+
       '<form id="upForm" class="grid" novalidate>'+
-      '<div class="span2">'+afield("up.name","Full name","text",up.name,'autocomplete="name" required')+'</div>'+
-      afield("up.index","Student number","text",up.index,'inputmode="numeric" autocomplete="username" required')+
-      afield("up.phone","Phone number","tel",up.phone,'autocomplete="tel" inputmode="tel" placeholder="e.g. 024 123 4567" required')+
-      '<div class="span2">'+afield("up.email","Student email","email",up.email,'autocomplete="email" required')+'</div>'+
-      '<div class="field span2"><label for="up.college">College</label><select id="up.college" data-auth="up.college" required><option value="">Choose your college</option>'+
-        COLLEGES.map(function(c){return '<option value="'+c.id+'"'+(up.college===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join("")+'</select></div>'+
-      '<div class="field"><label for="up.level">Level</label><select id="up.level" data-auth="up.level" required><option value="">Choose your level</option>'+
-        LEVELS.map(function(l){return '<option'+(up.level===l?' selected':'')+'>'+esc(l)+'</option>';}).join("")+'</select></div>'+
-      afield("up.programme","Programme of study","text",up.programme,'placeholder="e.g. BSc Civil Engineering" required')+
-      afield("up.pw","Password","password",up.pw,'autocomplete="new-password" placeholder="At least 6 characters" required')+
-      afield("up.pw2","Confirm password","password",up.pw2,'autocomplete="new-password" required')+
-      '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Registering…':'Register')+'</button></div></form>'+
-      '<p style="margin:0">Already registered? <button class="linkbtn" data-act="authTab" data-tab="in">Sign in</button></p>';
+      '<div class="grid span2 steppanel"'+(step===1?'':' hidden')+'>'+
+        '<div class="span2">'+afield("up.name","Full name","text",up.name,'autocomplete="name" required')+'</div>'+
+        '<div class="span2">'+afield("up.email","Student email","email",up.email,'autocomplete="email" required')+'</div>'+
+        pwSuggest("up.pw","Password",up.pw)+
+        '<div class="span2 btns"><button class="btn primary wide" type="button" data-act="upNext">Continue</button></div>'+
+      '</div>'+
+      '<div class="grid span2 steppanel"'+(step===2?'':' hidden')+'>'+
+        afield("up.index","Student number","text",up.index,'inputmode="numeric" autocomplete="username" required')+
+        afield("up.phone","Phone number","tel",up.phone,'autocomplete="tel" inputmode="tel" placeholder="e.g. 024 123 4567" required')+
+        '<div class="field span2"><label for="up.college">College</label><select id="up.college" data-auth="up.college" required><option value="">Choose your college</option>'+
+          COLLEGES.map(function(c){return '<option value="'+c.id+'"'+(up.college===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join("")+'</select></div>'+
+        '<div class="field"><label for="up.level">Level</label><select id="up.level" data-auth="up.level" required><option value="">Choose your level</option>'+
+          LEVELS.map(function(l){return '<option'+(up.level===l?' selected':'')+'>'+esc(l)+'</option>';}).join("")+'</select></div>'+
+        afield("up.programme","Programme of study","text",up.programme,'placeholder="e.g. BSc Civil Engineering" required')+
+        '<div class="span2 btns"><button class="btn" type="button" data-act="upBack"'+(A.busy?' disabled':'')+'>Back</button><button class="btn primary" style="flex:1" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Creating account…':'Create account')+'</button></div>'+
+      '</div></form>'+
+      '<p class="authswitch">Already have an account? '+authLink("in","Sign in")+'</p>';
   }
   return h+'</div></section></div>';
+}
+/* Strong-password helper. Browsers (Chrome, Safari, Edge) also offer their own suggestion on any
+   autocomplete="new-password" field and offer to save it; this button is the fallback for browsers that don't. */
+function genPassword(){
+  var cs="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", n=cs.length, lim=Math.floor(256/n)*n, out;
+  do{
+    out=""; while(out.length<14){ var b=new Uint8Array(32); crypto.getRandomValues(b); for(var i=0;i<b.length && out.length<14;i++){ if(b[i]<lim) out+=cs[b[i]%n]; } }
+  }while(!/[a-z]/.test(out)||!/[A-Z]/.test(out)||!/[0-9]/.test(out));
+  return out;
+}
+function pwSuggest(id,label,val){
+  return '<div class="span2">'+afield(id,label,"password",val,'autocomplete="new-password" placeholder="At least 6 characters" required')+
+    '<button type="button" class="linkbtn suggest" data-act="suggestPw" data-target="'+id+'">Suggest a strong password</button>'+
+    '</div>';
 }
 function afield(id,label,type,val,attrs,hint){
   return '<div class="field"><label for="'+id+'">'+label+'</label>'+pwBox(type,'<input id="'+id+'" data-auth="'+id+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>')+(hint?'<span class="hint">'+esc(hint)+'</span>':'')+'</div>';
 }
-function signedIn(r,h){ st.booking=r; st.h=h; remember(r,h); fromBooking(r); st.auth.busy=false; st.auth.msg=null; st.auth.in={index:"",pw:""}; st.auth.up=BLANKUP(); }
+function signedIn(r,h){ st.booking=r; st.h=h; remember(r,h); fromBooking(r); st.auth.busy=false; st.auth.msg=null; st.auth.in={index:"",pw:""}; st.auth.up=BLANKUP(); st.auth.step=1; }
 async function submitIn(){
   if(st.auth.busy) return;
   var A=st.auth, key=normIndex(A.in.index);
@@ -821,24 +994,38 @@ async function submitIn(){
   catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't sign in right now. Check your connection and try again."}; }
   A.busy=false; render();
 }
+var EMAIL_RE=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+function checkUpStep1(f){
+  var miss=[]; if(!f.name.trim()) miss.push("your full name"); if(!EMAIL_RE.test(normEmail(f.email))) miss.push("a valid email");
+  if(miss.length) return "Please add "+miss.join(" and ")+".";
+  if(f.pw.length<6) return "Choose a password with at least 6 characters.";
+  return "";
+}
+function checkUpStep2(f){
+  var miss=[]; if(!normIndex(f.index)) miss.push("student number");
+  if(f.phone.replace(/[^0-9]/g,"").length<9) miss.push("a valid phone number");
+  if(!f.college) miss.push("college"); if(!f.level) miss.push("level"); if(!f.programme.trim()) miss.push("programme");
+  return miss.length ? "Please add "+miss.join(", ")+"." : "";
+}
+function focusUp(id){ setTimeout(function(){ var el=document.getElementById(id); if(el) el.focus(); },0); }
 async function submitUp(){
   if(st.auth.busy) return;
-  var A=st.auth, f=A.up, key=normIndex(f.index), email=normEmail(f.email), miss=[];
-  if(!f.name.trim()) miss.push("your full name");
-  if(!key) miss.push("student number");
-  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) miss.push("a valid email");
-  if(f.phone.replace(/[^0-9]/g,"").length<9) miss.push("a valid phone number");
-  if(!f.college) miss.push("college");
-  if(!f.level) miss.push("level");
-  if(!f.programme.trim()) miss.push("programme");
-  if(miss.length){ A.msg={err:true,text:"Please add "+miss.join(", ")+"."}; render(); return; }
-  if(f.pw.length<6){ A.msg={err:true,text:"Choose a password with at least 6 characters."}; render(); return; }
-  if(f.pw!==f.pw2){ A.msg={err:true,text:"The two passwords don't match."}; render(); return; }
+  var A=st.auth, f=A.up, email=normEmail(f.email), key=normIndex(f.index), e;
+  if(A.step!==2){                       /* step 1: check the account details, then move on */
+    e=checkUpStep1(f); if(e){ A.msg={err:true,text:e}; render(); return; }
+    A.step=2; A.msg=null; render(); window.scrollTo(0,0); focusUp("up.index"); return;
+  }
+  e=checkUpStep1(f); if(e){ A.step=1; A.msg={err:true,text:e}; render(); return; }   /* safety net */
+  e=checkUpStep2(f); if(e){ A.msg={err:true,text:e}; render(); return; }
   A.busy=true; A.msg=null; render();
   try{
     var r=await API.createAccount({key:key,index:f.index.trim(),name:f.name.trim(),email:email,phone:f.phone.trim(),college:f.college,programme:f.programme.trim(),level:f.level,pw:f.pw});
     signedIn(r,""); st.view="dash"; st.msg={text:"You're registered. Now choose your session below."}; render(); toList(); return;
-  }catch(err){ A.msg={err:!err.info,text:err.user?err.message:"Couldn't complete your registration. Check your connection and try again."}; if(err.info){ A.tab="in"; A.in.index=f.index; A.up=BLANKUP(); } }
+  }catch(err){
+    A.msg={err:!err.info,text:err.user?err.message:"Couldn't complete your registration. Check your connection and try again."};
+    if(err.info){ A.tab="in"; A.step=1; A.in.index=f.index; A.up=BLANKUP(); }
+    else if(err.user && /email/i.test(err.message) && !/student number/i.test(err.message)){ A.step=1; }   /* problem is on step 1 */
+  }
   A.busy=false; render();
 }
 
@@ -853,10 +1040,9 @@ async function submitForgot(){
 async function submitNewPw(){
   var A=st.auth;
   if(A.np.pw.length<6){ A.msg={err:true,text:"Choose a password with at least 6 characters."}; render(); return; }
-  if(A.np.pw!==A.np.pw2){ A.msg={err:true,text:"The two passwords don't match."}; render(); return; }
   A.busy=true; A.msg=null; render();
   try{
-    await API.setPassword(A.np.pw); A.np={pw:"",pw2:""};
+    await API.setPassword(A.np.pw); A.np={pw:""};
     try{ history.replaceState(null,"",location.pathname); }catch(e){}
     var r=await API.restoreStudent();
     if(r){ signedIn(r,""); st.msg={text:"Your password has been changed."}; }
@@ -875,16 +1061,6 @@ async function submitStaffIn(){
   catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't sign in right now."}; }
   A.busy=false; render();
 }
-async function submitSetup(){
-  var A=st.auth, S=A.setup, email=normEmail(S.email);
-  if(!S.name.trim()||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ A.msg={err:true,text:"Enter a name and a valid email."}; render(); return; }
-  if(S.pw.length<6){ A.msg={err:true,text:"Choose a password with at least 6 characters."}; render(); return; }
-  if(S.pw!==S.pw2){ A.msg={err:true,text:"The two passwords don't match."}; render(); return; }
-  A.busy=true; A.msg=null; render();
-  try{ var h=S.pw; var u=await API.setupSuper(S.code,{name:S.name.trim(),email:email,h:h}); st.setupNeeded=false; staffSignedIn(u,h); await loadAdmin(); render(); return; }
-  catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't create the super admin."}; }
-  A.busy=false; render();
-}
 async function loadAdmin(){
   if(!(API && API.gas) || !st.staff) return;
   try{
@@ -892,6 +1068,37 @@ async function loadAdmin(){
     var seats={}; d.rows.forEach(function(r){ [r.s,r.g].forEach(function(sid){ if(sid){ seats[sid]=seats[sid]||{}; seats[sid][normIndex(r.i)]=r; } }); });
     st.seats=seats; st.sheetUrl=d.url||"";
   }catch(err){ st.msg={err:true,text:err.message}; }
+  if(st.staff.role!=="coord" && API.staffSessions){ try{ var d2=await API.staffSessions(); st.links=d2.links||{}; st.lastBc=d2.last||{}; st.linksErr=""; }catch(err){ st.linksErr=err.message; } }
+  st.updatedAt=new Date(); lastRoster=Date.now(); startLive();
+}
+/* ---------- Live updates (Supabase Realtime, with a polling fallback) ---------- */
+var liveT=null, pollT=null, lastRoster=0, syncing=false;
+function liveChip(){
+  var lbl = st.live==="live" ? "Live" : st.live==="reconnecting" ? "Reconnecting…" : "Not live";
+  return '<p class="livebar muted"><span class="livechip '+st.live+'" role="status">'+lbl+'</span>'+(st.updatedAt?' Updated '+esc(st.updatedAt.toLocaleTimeString("en-GB"))+'.':'')+(st.live==="live"?'':' Checking every 30 seconds.')+'</p>';
+}
+function startLive(){
+  if(!API || !API.watchAdmin || !st.staff) return;
+  API.watchAdmin(onAdminEvent,function(status){ st.live = status==="SUBSCRIBED" ? "live" : status==="CLOSED" ? "off" : "reconnecting"; render(); });
+  if(!pollT) pollT=setInterval(function(){ if(!document.hidden && st.staff && st.live!=="live") syncAdmin(true); },30000);
+}
+function stopLive(){ if(API && API.unwatchAdmin) API.unwatchAdmin(); st.live="off"; clearInterval(pollT); pollT=null; clearTimeout(liveT); }
+function onAdminEvent(){ clearTimeout(liveT); liveT=setTimeout(function(){ syncAdmin(false); },2000); }   /* wait 2 s so a burst of bookings is handled once */
+/* Seat counts are cheap and always refreshed. The full student list is reloaded only if someone is looking at it
+   (a session page or a search), and at most once every 5 seconds; otherwise it is marked stale and loaded when opened. */
+async function syncAdmin(force){
+  if(!st.staff || syncing) return; syncing=true;
+  try{
+    if(API.refresh) await API.refresh();
+    var viewing = st.adminSession || st.adminQ.trim();
+    if(force || viewing){
+      var wait=5000-(Date.now()-lastRoster);
+      if(force || wait<=0){ await loadAdmin(); lastRoster=Date.now(); st.rosterStale=false; }
+      else { st.rosterStale=true; clearTimeout(liveT); liveT=setTimeout(function(){ syncAdmin(false); },wait+50); }
+    } else st.rosterStale=true;
+    st.updatedAt=new Date();
+  }catch(e){}
+  syncing=false; render();
 }
 async function loadStaff(){ try{ st.staffList=await API.listStaff(staffAuthObj()); }catch(err){ st.staffList=[]; st.msg={err:true,text:err.message}; } render(); }
 async function saveStaffForm(){
@@ -918,7 +1125,8 @@ function render(){
   document.body.classList.toggle("is-staff", !!st.staff);
   var active=document.activeElement, activeId=active && active.id, selStart=null;
   try{ if(active && active.selectionStart!=null) selStart=active.selectionStart; }catch(e){}
-  document.getElementById("authSlot").innerHTML = authOn ? authHTML() : "";
+  syncUrl(authOn);
+  document.getElementById("authSlot").innerHTML = authOn ? (st.ready ? authHTML() : '<div class="auth"><section class="auth-main" style="grid-column:1/-1"><div class="auth-card"><div class="empty">Loading…</div></div></section></div>') : "";
   if(!authOn){
     renderNav();
     app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : renderSchedule();
@@ -952,7 +1160,20 @@ document.addEventListener("click",async function(e){
   var n=e.target.closest("[data-nav]"); if(n){ go(n.dataset.nav); return; }
   var b=e.target.closest("[data-act]"); if(!b) return;
   var a=b.dataset.act;
-  if(a==="authTab"){ st.auth.tab=b.dataset.tab; st.auth.msg=null; render(); if(b.dataset.tab==="staff" && st.setupNeeded!==false && API){ try{ st.setupNeeded=await API.staffSetupNeeded(); }catch(err){ st.setupNeeded=false; } render(); } return; }
+  if(a==="authTab"){
+    if(e.metaKey||e.ctrlKey||e.shiftKey||e.button) return;            /* let "open in new tab" work */
+    e.preventDefault(); st.auth.tab=b.dataset.tab; st.auth.msg=null; st.auth.step=1;
+    try{ if(AUTH_PATH[st.auth.tab] && location.pathname!==AUTH_PATH[st.auth.tab]) history.pushState(null,"",AUTH_PATH[st.auth.tab]); }catch(err){}
+    render(); window.scrollTo(0,0); return;
+  }
+  if(a==="upNext") return submitUp();
+  if(a==="suggestPw"){
+    var pin=document.getElementById(b.dataset.target); if(!pin) return;
+    pin.value=genPassword(); pin.dispatchEvent(new Event("input",{bubbles:true}));
+    if(pin.type==="password"){ var eye=pin.parentNode.querySelector("[data-pwtoggle]"); if(eye) eye.click(); }   /* show it so it can be noted down */
+    pin.focus(); return;
+  }
+  if(a==="upBack"){ st.auth.step=1; st.auth.msg=null; render(); window.scrollTo(0,0); focusUp("up.name"); return; }
   if(a==="closeBg"){ if(e.target===b) closeBook(); return; }
   if(a==="close") return closeBook();
   if(a==="confirmBook") return submitBook();
@@ -960,28 +1181,52 @@ document.addEventListener("click",async function(e){
   if(a==="toList") return toList();
   if(a==="toMine") return go("mine");
   if(a==="findCollege"||a==="change"||a==="findGrasag"){ st.msg=null; st.view="dash"; render(); return toList(); }
-  if(a==="signOut"||a==="toAuth"){ if(API&&API.signOut) API.signOut(); var wasStaff=!!st.staff; st.booking=null; st.h=""; remember(null); setCollege(""); st.staff=null; st.sh=""; st.staffList=null; st.staffForm=null; try{ localStorage.removeItem("gw-staff"); }catch(e){} if(API&&API.gas) st.seats={}; st.msg=null; st.pick=null; st.view="dash"; st.auth.tab="in"; render(); window.scrollTo(0,0); return; }
+  if(a==="signOut"||a==="toAuth"){ if(API&&API.signOut) API.signOut(); var wasStaff=!!st.staff; st.booking=null; st.h=""; remember(null); setCollege(""); st.staff=null; st.sh=""; st.staffList=null; st.staffForm=null; try{ localStorage.removeItem("gw-staff"); }catch(e){} if(API&&API.gas) st.seats={}; stopLive(); st.adminSession=null; st.links={}; st.lastBc={}; st.linkDraft={}; st.confirmBroadcast=null; st.bcRun=null; st.msg=null; st.pick=null; st.view="dash"; st.auth.tab="in"; render(); window.scrollTo(0,0); return; }
   if(a==="newStaff"){ st.staffForm={edit:false,name:"",email:"",role:"organiser",college:"",pw:""}; st.msg=null; render(); return; }
   if(a==="editStaff"){ var u=(st.staffList||[]).filter(function(x){return x.email===b.dataset.email;})[0]; if(u){ st.staffForm={edit:true,name:u.name,email:u.email,role:u.role,college:u.college||"",pw:""}; st.msg=null; render(); window.scrollTo(0,0); } return; }
   if(a==="cancelStaff"){ st.staffForm=null; render(); return; }
   if(a==="askDelStaff"){ st.confirmStaff=b.dataset.email; render(); return; }
   if(a==="delStaff"){ try{ await API.deleteStaff(staffAuthObj(), b.dataset.email); st.msg={text:"Staff member removed."}; }catch(err){ st.msg={err:true,text:err.message}; } st.confirmStaff=null; return loadStaff(); }
-  if(a==="resetPw"){ try{ await API.resetStudent(staffAuthObj(), b.dataset.key); st.resetDone=b.dataset.key; st.msg={text:"A password reset link has been emailed to the student."}; }catch(err){ st.msg={err:true,text:err.message}; } render(); return; }
   if(a==="askDrop"){ st.confirmDrop=b.dataset.sid; render(); return; }
   if(a==="noDrop"){ st.confirmDrop=null; render(); return; }
   if(a==="doDrop") return dropSeat(b.dataset.sid);
-  if(a==="toggle"){ st.adminOpen[b.dataset.sid]=!st.adminOpen[b.dataset.sid]; render(); return; }
+  if(a==="openSession"||a==="closeSession"){
+    if(e.metaKey||e.ctrlKey||e.shiftKey||e.button) return;
+    e.preventDefault(); st.adminSession = a==="openSession" ? b.dataset.sid : null; st.rq=""; st.pg.roster=1; st.msg=null; st.fr={college:"all",level:"all",session:"all"};
+    if(st.rosterStale){ st.rosterStale=false; loadAdmin().then(render); }
+    try{ history.pushState(null,"", a==="openSession" ? "/staff?session="+encodeURIComponent(b.dataset.sid) : "/staff"); }catch(err){}
+    render(); window.scrollTo(0,0); return;
+  }
+  if(a==="askBroadcast"){ st.confirmBroadcast=b.dataset.sid; render(); return; }
+  if(a==="noBroadcast"){ st.confirmBroadcast=null; render(); return; }
+  if(a==="doBroadcast"||a==="resumeBroadcast"||a==="retryBroadcast"){
+    var bsid=b.dataset.sid; if(st.bcRun) return;
+    try{
+      st.bcRun=bsid; render();                                /* shows the buttons as busy while the queue is prepared */
+      var start = a==="doBroadcast" ? await API.broadcastStart(bsid) : a==="retryBroadcast" ? await API.broadcastRetry(st.lastBc[bsid].id) : st.lastBc[bsid];
+      st.bcRun=null; return runBroadcast(bsid,start);
+    }catch(err){ st.bcRun=null; st.confirmBroadcast=null; st.msg={err:true,text:err.message}; render(); window.scrollTo(0,0); return; }
+  }
+  if(a==="clearFilters"){ if(b.dataset.set==="fs"){ st.fs={day:"all",track:"all",status:"all"}; st.pg.sessions=1; } else { st.fr={college:"all",level:"all",session:"all"}; st.pg.roster=1; st.pg.search=1; } render(); return; }
+  if(a==="pg"){ st.pg[b.dataset.key]=+b.dataset.to; render(); var box=b.closest(".panel"); if(box) box.scrollIntoView({block:"start"}); return; }
   if(a==="csv") return downloadCSV();
-  if(a==="gasReload"){ await loadAdmin(); render(); return; }
+  if(a==="gasReload"){ st.refreshing=true; render(); await loadAdmin(); st.rosterStale=false; st.refreshing=false; render(); return; }
 });
-document.addEventListener("keydown",function(e){ if(e.key==="Escape" && st.pick) closeBook(); });
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape" && st.pick) closeBook();
+  /* Enter on step 1 of Register moves to step 2 without submitting the form (so the browser does not offer to save a half-filled sign-up) */
+  if(e.key==="Enter" && e.target && e.target.tagName==="INPUT" && e.target.closest && e.target.closest("#upForm") && st.auth.step!==2){ e.preventDefault(); submitUp(); }
+});
 document.addEventListener("input",function(e){
   var t=e.target;
   if(t.dataset && t.dataset.auth){ var p=t.dataset.auth.split("."); st.auth[p[0]][p[1]]=t.value; return; }
   if(t.dataset && t.dataset.sf && st.staffForm){ st.staffForm[t.dataset.sf]=t.value; if(t.dataset.sf==="role") render(); return; }
   if(t.id==="q"){ st.q=t.value; if(st.view!=="dash") st.view="dash"; render(); return; }
   if(t.id==="gasPass") st.gasPass=t.value;
-  if(t.id==="adminQ"){ st.adminQ=t.value; render(); }
+  if(t.id==="adminQ"){ st.adminQ=t.value; st.pg.search=1; if(st.rosterStale && t.value.trim()){ st.rosterStale=false; loadAdmin().then(render); } render(); }
+  if(t.dataset && t.dataset.flt){ var fp=t.dataset.flt.split("."); st[fp[0]][fp[1]]=t.value; if(fp[0]==="fs") st.pg.sessions=1; else { st.pg.roster=1; st.pg.search=1; } render(); return; }
+  if(t.id==="linkUrl" && st.adminSession){ st.linkDraft[st.adminSession]=t.value; var ab=document.querySelector("[data-act=askBroadcast]"); if(ab) ab.disabled = !((st.links||{})[st.adminSession]) || t.value.trim()!==(st.links||{})[st.adminSession]; return; }
+  if(t.id==="rQ"){ st.rq=t.value; st.pg.roster=1; render(); }
 });
 document.addEventListener("submit",function(e){
   e.preventDefault();
@@ -991,8 +1236,8 @@ document.addEventListener("submit",function(e){
   if(id==="staffIn") return submitStaffIn();
   if(id==="forgotForm") return submitForgot();
   if(id==="newpwForm") return submitNewPw();
-  if(id==="setupForm") return submitSetup();
   if(id==="staffForm") return saveStaffForm();
+  if(id==="linkForm") return submitLink();
 });
 
 function payloadFor(b,sid,gsid){
@@ -1010,7 +1255,7 @@ async function submitBook(){
   try{
     var res=await API.register(payloadFor(b,sid,gsid));
     st.booking=res; st.pick=null; st.view="mine"; st.msg={text:"You're booked for "+longLabel(s)+"."};
-    st.busy=false; render(); window.scrollTo(0,0); return;
+    st.busy=false; render(); window.scrollTo(0,0); if(API.notify) API.notify(); return;
   }catch(err){ st.sheetMsg={err:true,text:err.user?err.message:"Couldn't save your booking. Check your connection and try again."}; if(API&&API.refresh) API.refresh(); }
   st.busy=false; render();
 }
@@ -1040,17 +1285,20 @@ async function restore(){
   }catch(e){}
 }
 function detectPortal(){ return /^\/staff\/?$/i.test(location.pathname) || /^#staff$/i.test(location.hash||"") ? "staff" : "student"; }
+window.addEventListener("popstate",function(){ if(st.staff){ st.adminSession=qsSession(); st.rq=""; st.pg.roster=1; } if(st.portal!=="staff" && !st.booking && !st.staff){ var tb=routeTab(location.pathname); if(tb){ st.auth.tab=tb; st.auth.msg=null; } } render(); });
 window.addEventListener("hashchange",function(){ if(!/type=recovery/.test(location.hash||"") && detectPortal()!==st.portal) location.reload(); });
 async function boot(){
   st.portal = detectPortal();
-  st.setupNeeded = false;
+  st.auth.tab = st.portal==="staff" ? "staff" : (routeTab(location.pathname) || "up");   /* signed-out landing page = Register */
   if(/type=recovery/.test(location.hash||"")){ st.portal="student"; st.auth.tab="newpw"; }
   render();
   var cfg=null; try{ cfg=await (await fetch("/api/config",{cache:"no-store"})).json(); }catch(e){}
-  if(!cfg || !cfg.url || !cfg.anonKey || !window.supabase){ st.mode="unconfigured"; render(); return; }
+  if(!cfg || !cfg.url || !cfg.anonKey || !window.supabase){ st.mode="unconfigured"; st.ready=true; render(); return; }
   var sb=window.supabase.createClient(cfg.url, cfg.anonKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
   sb.auth.onAuthStateChange(function(ev){ if(ev==="PASSWORD_RECOVERY"){ st.portal="student"; st.booking=null; st.staff=null; st.auth.tab="newpw"; st.auth.msg=null; render(); } });
-  API=supaAPI(sb); st.mode="live"; API.subscribe(); render(); restore();
+  API=supaAPI(sb); st.mode="live"; API.subscribe();
+  try{ await sb.auth.getSession(); }catch(e){}      /* lets a password-reset link in the address finish being read */
+  await restore(); if(st.staff) st.adminSession=qsSession(); st.ready=true; render();
 }
 boot();
 })();
