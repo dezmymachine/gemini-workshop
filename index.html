@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Gemini Workshop Registration</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@500&display=swap">
+<style>
+/* Layout: app shell. Fixed left sidebar (top bar on phones), search header, content column max 1040px: welcome banner, stat cards, horizontal session cards. */
+:root{
+  --bg:#F8F9FA; --surface:#FFFFFF; --sunk:#F1F3F4; --line:#DADCE0;
+  --ink:#202124; --muted:#5F6368; --accent:#1A73E8; --accent-ink:#FFFFFF; --accent-soft:#E8F0FE;
+  --hero:#1A73E8; --hero-deep:#174EA6; --hero-ink:#FFFFFF; --hero-muted:#D2E3FC;
+  --g-red:#EA4335; --g-yellow:#FBBC04; --g-green:#34A853; --g-blue:#4285F4;
+  --warn:#B06000; --warn-soft:#FEF7E0; --full:#C5221F; --full-soft:#FCE8E6; --grasag:#188038; --grasag-soft:#E6F4EA;
+  --scrim:rgba(32,33,36,.55);
+  --f-display:"Outfit", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Roboto", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r:12px; --side:252px;
+}
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:10;background:var(--surface)}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.12}
+h2{font-size:26px;font-weight:700}
+h3{font-size:20px;font-weight:700}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;font-weight:700}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* shell */
+.side{position:fixed;top:env(safe-area-inset-top, 0px);bottom:0;left:0;width:var(--side);background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding:22px 16px max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));z-index:6}
+.brand{display:flex;gap:10px;align-items:center;padding:4px 6px 18px}
+.mark{width:38px;height:38px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:5px;flex:none}
+.mark i{border-radius:50%;display:block}
+.mark i:nth-child(1){background:var(--g-blue)}.mark i:nth-child(2){background:var(--g-red)}.mark i:nth-child(3){background:var(--g-yellow)}.mark i:nth-child(4){background:var(--g-green)}
+.brand b{font-family:var(--f-display);font-weight:800;font-size:17px;line-height:1.1;display:block}
+.brand small{color:var(--muted);font-size:12px}
+.navlist{display:grid;gap:4px}
+.navgroup{font-size:12px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted);padding:16px 10px 6px}
+.nav{display:flex;gap:12px;align-items:center;width:100%;min-height:44px;padding:9px 14px;border-radius:0 22px 22px 0;border:0;background:none;cursor:pointer;font-weight:700;text-align:left;color:var(--ink)}
+.nav:hover{background:var(--sunk)}
+.nav[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+.nav svg{flex:none}
+.nav .count{margin-left:auto;font-size:12px;font-family:var(--f-mono);background:var(--sunk);color:var(--muted);border-radius:99px;padding:1px 8px}
+.nav[aria-current="page"] .count{background:var(--surface);color:var(--accent)}
+.whoami{margin-top:auto;display:flex;gap:10px;align-items:center;padding:12px;border-radius:10px;background:var(--sunk);min-width:0}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;flex:none}
+.avatar.lg{width:64px;height:64px;font-size:24px}
+.whoami .nm{font-weight:700;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.whoami .rl{font-size:13px;color:var(--muted)}
+.shell{margin-left:var(--side);min-height:100vh;display:flex;flex-direction:column;min-width:0}
+.topsearch{position:sticky;top:env(safe-area-inset-top, 0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding-block:14px;padding-left:max(24px, env(safe-area-inset-left, 0px));padding-right:max(24px, env(safe-area-inset-right, 0px));display:flex;gap:12px;align-items:center}
+.search{position:relative;flex:1;max-width:420px}
+.search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.search input{width:100%;min-height:46px;border:0;border-radius:12px;background:var(--sunk);padding:10px 14px 10px 42px}
+.content{width:100%;max-width:1088px;margin:0 auto;grid-template-columns:minmax(0,1fr);padding-block:28px 72px;padding-left:max(24px, env(safe-area-inset-left, 0px));padding-right:max(24px, env(safe-area-inset-right, 0px));display:grid;gap:28px}
+.mobilebar{display:none}
+@media (max-width:900px){
+  .side{display:none}
+  .shell{margin-left:0}
+  .mobilebar{display:flex;position:sticky;top:env(safe-area-inset-top, 0px);z-index:6;background:var(--surface);border-bottom:1px solid var(--line);gap:4px;overflow-x:auto;padding-block:8px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+  .mobilebar .nav{width:auto;white-space:nowrap;padding:8px 12px}
+  .topsearch{position:static;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+  .search{max-width:none}
+  .content{padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+}
+
+/* welcome banner */
+.welcome{position:relative;overflow:hidden;border-radius:16px;background:linear-gradient(90deg,var(--g-blue) 0 25%,var(--g-red) 25% 50%,var(--g-yellow) 50% 75%,var(--g-green) 75%) top/100% 6px no-repeat,linear-gradient(120deg,var(--hero),var(--hero-deep));color:var(--hero-ink);padding:34px 36px;display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between}
+.welcome::before,.welcome::after{content:"";position:absolute;border-radius:50%;border:34px solid rgba(255,255,255,.07);pointer-events:none}
+.welcome::before{width:340px;height:340px;right:-60px;top:-150px}
+.welcome::after{width:220px;height:220px;right:180px;bottom:-150px}
+.welcome h1{font-size:clamp(28px,4vw,38px);font-weight:800;letter-spacing:-.01em}
+.welcome p{margin:8px 0 0;color:var(--hero-muted);font-weight:700;max-width:52ch}
+.welcome .btns{margin-top:22px}
+.welcome .btn{background:#FFFFFF;border-color:#FFFFFF;color:#174EA6}
+.welcome .btn.alt{background:transparent;border-color:rgba(255,255,255,.7);color:var(--hero-ink)}
+.bigstat{position:relative;z-index:1;text-align:right}
+.bigstat b{display:block;font-family:var(--f-display);font-size:64px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.bigstat span{font-weight:700;color:var(--hero-muted)}
+.welcome > *{position:relative;z-index:1}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:720px){.stats{grid-template-columns:minmax(0,1fr)}}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px 22px;display:grid;gap:10px}
+.stat .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--sunk);color:var(--muted)}
+.stat .ic.a{background:var(--accent-soft);color:var(--accent)}
+.stats .stat:nth-child(2) .ic{background:var(--grasag-soft);color:var(--grasag)}
+.stats .stat:nth-child(3) .ic{background:var(--full-soft);color:var(--full)}
+.stat .lb{color:var(--muted);font-size:15px}
+.stat .vl{font-family:var(--f-display);font-size:34px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.stat .sub{font-size:13px;color:var(--muted)}
+
+/* sections & filters */
+.sec-head{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:end;justify-content:space-between}
+.sec-head p{margin:6px 0 0;color:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;max-width:100%;min-width:0}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:99px;padding:8px 14px;min-height:44px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent)}
+.filters select{min-height:44px;border:1.5px solid var(--line);border-radius:99px;padding:8px 14px;background:var(--surface);font-weight:700;font-size:14px;max-width:100%}
+.colsel{display:flex;gap:8px;align-items:center;min-width:0;max-width:100%;flex:0 1 340px}
+.colsel select{flex:1;min-width:0;width:100%}
+@media (max-width:600px){.welcome{padding:26px 22px}.bigstat{text-align:left}.colsel{flex:1 1 100%}}
+
+/* horizontal session cards */
+.list{display:grid;gap:16px}
+.hcard{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+@media (max-width:720px){.hcard{grid-template-columns:minmax(0,1fr)}}
+.banner{position:relative;min-height:170px;background:color-mix(in oklab, var(--hue) 24%, var(--surface));display:flex;flex-direction:column;justify-content:space-between;padding:18px 20px;overflow:hidden}
+.banner::before{content:"";position:absolute;right:-50px;bottom:-80px;width:220px;height:220px;border-radius:50%;border:26px solid color-mix(in oklab, var(--hue) 34%, transparent)}
+.banner::after{content:"";position:absolute;right:70px;top:-60px;width:110px;height:110px;border-radius:50%;background:color-mix(in oklab, var(--hue) 18%, transparent)}
+.banner .code{font-family:var(--f-display);font-weight:800;font-size:40px;letter-spacing:-.02em;line-height:1;color:var(--ink);position:relative;z-index:1}
+.banner .trk{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);position:relative;z-index:1}
+@media (max-width:720px){.banner{min-height:110px}}
+.hbody{display:flex;flex-direction:column;gap:12px;padding:20px 24px;min-width:0}
+.htop{display:flex;gap:12px;justify-content:space-between;align-items:flex-start}
+.tag{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.tag.g{color:var(--grasag)}
+.metarow{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--muted);font-size:15px}
+.metarow span{display:inline-flex;gap:6px;align-items:center}
+.hfoot{margin-top:auto;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:14px}
+.meter{height:5px;border-radius:3px;background:var(--sunk);overflow:hidden;width:160px;max-width:100%}
+.meter i{display:block;height:100%;background:var(--accent)}
+.meter.warn i{background:var(--warn)} .meter.full i{background:var(--full)}
+.pill{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:99px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.full{background:var(--full-soft);color:var(--full)}
+.pill.g{background:var(--grasag-soft);color:var(--grasag)}
+.pill.plain{background:var(--sunk);color:var(--muted)}
+
+.btns{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{min-height:44px;padding:10px 22px;border-radius:22px;border:1.5px solid var(--line);background:var(--surface);font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--full);border-color:var(--full);background:transparent}
+.btn.sm{min-height:40px;padding:8px 14px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:700;cursor:pointer;text-decoration:underline}
+.empty{padding:28px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:var(--r)}
+.notice{border:1px solid var(--line);background:var(--sunk);border-radius:var(--r);padding:12px 14px;font-size:14px}
+.notice.err{background:var(--full-soft);border-color:transparent;color:var(--full)}
+.notice.ok{background:var(--accent-soft);border-color:transparent}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;align-items:start}
+.grid .span2{grid-column:1/-1}
+@media (max-width:600px){.grid{grid-template-columns:minmax(0,1fr)}}
+.field{display:grid;gap:6px;min-width:0}
+.field label{font-weight:700;font-size:14px}
+.field .hint{font-size:13px;color:var(--muted)}
+.field input,.field select{width:100%;height:46px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.field input[readonly]{color:var(--muted)}
+
+.sheet{position:fixed;inset:0;z-index:20;background:var(--scrim);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(24px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px))}
+.sheet-box{width:100%;max-width:640px;background:var(--surface);border-radius:16px;display:grid;gap:18px;padding:24px;border:1px solid var(--line)}
+.sheet-top{display:flex;justify-content:space-between;align-items:start;gap:12px}
+.iconbtn{width:44px;height:44px;border-radius:8px;border:1px solid var(--line);background:var(--surface);cursor:pointer;display:grid;place-items:center;flex:none}
+.summary{display:grid;gap:4px;padding:14px 16px;border-radius:10px;background:color-mix(in oklab, var(--hue) 16%, var(--surface))}
+
+.dash{display:grid;grid-template-columns:minmax(0,290px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:980px){.dash{grid-template-columns:minmax(0,1fr)}}
+.profile{display:grid;gap:14px}
+.profile dl{display:grid;gap:10px;margin:0}
+.profile dt{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.profile dd{margin:2px 0 0;font-weight:700;overflow-wrap:anywhere}
+.startsin{font-family:var(--f-mono);font-size:14px;color:var(--accent);font-weight:500}
+.prompt{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:16px 18px;border-radius:var(--r);background:var(--grasag-soft)}
+
+.sched{overflow-x:auto}
+.sched table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+.sched th,.sched td{border-bottom:1px solid var(--line);padding:12px;text-align:left;vertical-align:top}
+.sched th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cell{display:grid;gap:4px}
+.cell .t{font-weight:700}
+.admin-table td.num,.admin-table th.num{text-align:right}
+.roster{background:var(--sunk)}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.toolbar .field{flex:1 1 220px}
+
+/* sign-in page */
+body.auth-on .side,body.auth-on .shell{display:none}
+body.is-staff .topsearch{display:none}
+.auth{min-height:100vh;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr)}
+@media (max-width:900px){.auth{grid-template-columns:minmax(0,1fr)}}
+.auth-side{position:relative;overflow:hidden;background:linear-gradient(150deg,var(--hero),var(--hero-deep));color:var(--hero-ink);display:flex;flex-direction:column;justify-content:space-between;gap:28px;padding-block:40px;padding-left:max(40px, env(safe-area-inset-left, 0px));padding-right:40px}
+.auth-side::after{content:"";position:absolute;width:420px;height:420px;border-radius:50%;border:40px solid rgba(255,255,255,.07);right:-160px;bottom:-160px;pointer-events:none}
+.auth-side .stripe{position:absolute;inset:0 0 auto;height:6px;background:linear-gradient(90deg,var(--g-blue) 0 25%,var(--g-red) 25% 50%,var(--g-yellow) 50% 75%,var(--g-green) 75%)}
+.auth-side .brand small{color:var(--hero-muted)}
+.auth-side .mark{background:#FFFFFF;border-radius:10px}
+.auth-side h1{font-size:clamp(30px,4vw,46px);font-weight:700;letter-spacing:-.01em}
+.auth-side p{margin:0;color:var(--hero-muted);max-width:44ch}
+.auth-side .small{font-size:14px}
+.ticks{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:10px}
+.ticks li{display:flex;gap:10px;align-items:flex-start}
+.ticks li::before{content:"";flex:none;width:18px;height:18px;margin-top:3px;border-radius:50%;background:rgba(255,255,255,.18) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12l4 4 8-8'/%3E%3C/svg%3E") center/12px no-repeat}
+@media (max-width:900px){.auth-side{padding:32px max(16px, env(safe-area-inset-right, 0px)) 32px max(16px, env(safe-area-inset-left, 0px))}.auth-side .ticks,.auth-side .small{display:none}}
+.auth-main{display:flex;align-items:center;justify-content:center;background:var(--bg);padding-block:40px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.auth-card{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:28px;display:grid;gap:20px}
+@media (max-width:480px){.auth-card{padding:20px}}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:22px;padding:4px}
+.seg button{border:0;background:none;border-radius:18px;min-height:40px;font-weight:700;cursor:pointer;color:var(--muted)}
+.seg button[aria-selected="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(60,64,67,.25)}
+.btn.wide{width:100%;justify-content:center}
+.confirm-dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:0}
+.confirm-dl dt{color:var(--muted);font-size:14px}
+.confirm-dl dd{margin:0;font-weight:700;overflow-wrap:anywhere}
+@media (prefers-reduced-motion:no-preference){.meter i{transition:width .4s ease}.hcard{transition:border-color .15s}.hcard:hover{border-color:var(--muted)}}
+</style>
+
+<aside class="side" aria-label="Main">
+  <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Gemini Workshop</b><small>17–19 November 2026</small></span></div>
+  <nav class="navlist" id="sideNav"></nav>
+  <div id="whoami"></div>
+</aside>
+<div class="shell">
+  <nav class="mobilebar" id="mobileNav" aria-label="Main"></nav>
+  <header class="topsearch">
+    <label class="search"><span class="sr" hidden>Search sessions</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search your sessions…" aria-label="Search your sessions"></label>
+  </header>
+  <main class="content" id="app"><div class="notice">Loading sessions…</div></main>
+</div>
+<div id="authSlot"></div>
+<div id="sheetSlot"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+"use strict";
+/* ---------- Programme data ---------- */
+var CAP = 400;
+var DAYS = {
+  d1:{label:"Tue 17 Nov", date:"Tuesday 17 November 2026", short:"Tue 17 Nov", dom:17},
+  d2:{label:"Wed 18 Nov", date:"Wednesday 18 November 2026", short:"Wed 18 Nov", dom:18},
+  d3:{label:"Thu 19 Nov", date:"Thursday 19 November 2026", short:"Thu 19 Nov", dom:19}
+};
+var DAY_ORDER=["d1","d2","d3"];
+var SLOTS = {1:"10:00 – 11:30 AM", 2:"12:30 – 2:00 PM", 3:"3:00 – 4:30 PM", 4:"5:30 – 7:00 PM", 5:"7:30 – 9:00 PM"};
+var SLOT_START = {1:[10,0], 2:[12,30], 3:[15,0], 4:[17,30], 5:[19,30]}; /* Ghana time = GMT */
+var TRACKS = {
+  "d1-coe":  {day:"d1", name:"Track 1", code:"CoE",   label:"College of Engineering", hue:"#EA4335"},
+  "d1-cos":  {day:"d1", name:"Track 2", code:"CoS",   label:"College of Science", hue:"#4285F4"},
+  "d2-cohss":{day:"d2", name:"Track 1", code:"CoHSS", label:"College of Humanities & Social Sciences", hue:"#FBBC04"},
+  "d2-cabe": {day:"d2", name:"Track 2", code:"CABE",  label:"College of Art & Built Environment", hue:"#34A853"},
+  "d3-cohs": {day:"d3", name:"Track 1", code:"CoHS",  label:"College of Health Sciences", hue:"#EA4335"},
+  "d3-canr": {day:"d3", name:"Track 2", code:"CANR · IDL", label:"Agriculture & Natural Resources · Distance Learning", hue:"#34A853"},
+  "d1-grasag":{day:"d1", name:"GRASAG", code:"GRASAG", label:"Postgraduate students", hue:"#4285F4", g:true},
+  "d2-grasag":{day:"d2", name:"GRASAG", code:"GRASAG", label:"Postgraduate students", hue:"#4285F4", g:true},
+  "d3-grasag":{day:"d3", name:"GRASAG", code:"GRASAG", label:"Postgraduate students", hue:"#4285F4", g:true}
+};
+var COLLEGES = [
+  {id:"CoE",   name:"College of Engineering", track:"d1-coe"},
+  {id:"CoS",   name:"College of Science", track:"d1-cos"},
+  {id:"CoHSS", name:"College of Humanities & Social Sciences", track:"d2-cohss"},
+  {id:"CABE",  name:"College of Art & Built Environment", track:"d2-cabe"},
+  {id:"CoHS",  name:"College of Health Sciences", track:"d3-cohs"},
+  {id:"CANR",  name:"College of Agriculture & Natural Resources", track:"d3-canr"},
+  {id:"IDL",   name:"Distance Learning (IDL)", track:"d3-canr"}
+];
+var LEVELS = ["Level 100","Level 200","Level 300","Level 400","Level 500","Level 600","Postgraduate (Masters)","Postgraduate (PhD)"];
+var SIZES = {"d1-coe":4,"d1-cos":4,"d2-cohss":5,"d2-cabe":4,"d3-cohs":4,"d3-canr":4,"d1-grasag":1,"d2-grasag":1,"d3-grasag":1};
+var SESSIONS = [];
+Object.keys(SIZES).forEach(function(t){ for(var n=1;n<=SIZES[t];n++){ var tr=TRACKS[t];
+  SESSIONS.push({id:t+"-"+n, track:t, slot:n, day:tr.day, g:!!tr.g, time:SLOTS[n], title: tr.g ? "GRASAG Session" : "Session "+n}); } });
+SESSIONS.sort(function(a,b){ return a.day<b.day?-1:a.day>b.day?1:(a.slot-b.slot)||(a.g-b.g)||(a.track<b.track?-1:1); });
+var BY_ID={}; SESSIONS.forEach(function(s){ BY_ID[s.id]=s; });
+var FIRST_START = Date.UTC(2026,10,17,10,0);
+function startOf(s){ var d=DAYS[s.day].dom, t=SLOT_START[s.slot]; return Date.UTC(2026,10,d,t[0],t[1]); }
+function isPG(level){ return /^Postgraduate/.test(level||""); }
+function collegesFor(track){ return COLLEGES.filter(function(c){ return c.track===track; }); }
+function collegeName(id){ return (COLLEGES.filter(function(c){return c.id===id;})[0]||{}).name||id||""; }
+
+/* ---------- State ---------- */
+var BLANK=function(){ return {name:"",index:"",email:"",college:"",programme:"",level:""}; };
+var st = {
+  mode:"connecting", portal:"student", view:"dash", counts:{}, seats:{}, admin:false, q:"", myCol:"", myPG:false, pickCol:"", pickPG:"",
+  fDay:"all", fCol:"all", pick:null, form:BLANK(), booking:null, busy:false, msg:null, sheetMsg:null,
+  confirmDrop:null, h:"", staff:null, sh:"", staffList:null, staffForm:null, setupNeeded:null, owner:false,
+  auth:{fg:{email:""}, np:{pw:"",pw2:""}, tab:"in", in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, setup:{code:"",name:"",email:"",pw:"",pw2:""}, msg:null, busy:false}, find:{index:"",email:""}, adminOpen:{}, adminQ:"", gasPass:"", sheetUrl:""
+};
+var API=null;
+function BLANKUP(){ return {name:"",index:"",email:"",phone:"",college:"",level:"",programme:"",pw:"",pw2:""}; }
+st.auth.up=BLANKUP();
+
+/* ---------- Helpers ---------- */
+function esc(v){ return String(v==null?"":v).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];}); }
+function normIndex(v){ return String(v||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+function normEmail(v){ return String(v||"").trim().toLowerCase(); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+function userErr(m){ var e=new Error(m); e.user=true; return e; }
+function count(sid){ return st.counts[sid]||0; }
+function cap(sid){ return (st.caps && st.caps[sid]) || CAP; }
+function left(sid){ return Math.max(0, cap(sid)-count(sid)); }
+function recountFromSeats(){ var c={}; Object.keys(st.seats).forEach(function(sid){ var seats=st.seats[sid]||{}; c[sid]=Object.keys(seats).filter(function(k){return !!seats[k];}).length; }); st.counts=c; }
+function shardOf(key){ var h=0; for(var i=0;i<key.length;i++){ h=(h*31+key.charCodeAt(i))>>>0; } return "s"+(h%64); }
+function sessLabel(sid){ var s=BY_ID[sid]; return s ? TRACKS[s.track].code+" · "+s.title : ""; }
+function longLabel(s){ return DAYS[s.day].short+" "+s.time+" | "+TRACKS[s.track].code+" "+s.title; }
+function mine(sid){ return !!(st.booking && (st.booking.s===sid || st.booking.g===sid)); }
+function remember(){ /* Supabase keeps the signed-in session */ }
+function recall(){ try{ return JSON.parse(localStorage.getItem("gw-reg")||"null"); }catch(e){ return null; } }
+function svg(p,w){ return '<svg width="'+(w||18)+'" height="'+(w||18)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>'; }
+var ICON={
+  dash:svg('<rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/>'),
+  book:svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 15l2.5 2.5L16 13"/>'),
+  sched:svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+  org:svg('<path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6"/>'),
+  out:svg('<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3"/>'),
+  users:svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.6-5.5 6.5-5.5s5.5 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2 .6 3.2 2.5 3.8 5.5"/>'),
+  key:svg('<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/>'),
+  cal:svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',16),
+  clock:svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',16),
+  user:svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',16),
+  live:svg('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',16),
+  seat:svg('<path d="M5 11V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v5"/><path d="M3 11h18v5H3zM6 16v4M18 16v4"/>',20),
+  timer:svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',20),
+  ticket:svg('<path d="M3 9a2 2 0 0 0 0 4v4h18v-4a2 2 0 0 0 0-4V5H3z"/><path d="M13 5v14" stroke-dasharray="2 2"/>',20),
+  x:svg('<path d="M6 6l12 12M18 6L6 18"/>')
+};
+
+var ROLES={super:"Super admin",organiser:"Organiser",coord:"College coordinator"};
+function staffKey(email){ return normEmail(email).replace(/[^a-z0-9]/g,"-").slice(0,180)||"x"; }
+/* ---------- Data layer: Supabase ---------- */
+function supaAPI(sb){
+  function friendly(e){
+    var m=(e&&e.message)||String(e||"");
+    if(/SESSION_FULL/.test(m)) return userErr("That session has just filled up. Please choose another session.");
+    if(/CLASH/.test(m)) return userErr("This clashes with your other session. Pick a different time.");
+    if(/NOT_POSTGRAD/.test(m)) return userErr("GRASAG sessions are for postgraduate students only.");
+    if(/WRONG_COLLEGE/.test(m)) return userErr("This session is not for your college.");
+    if(/NOT_STUDENT/.test(m)) return userErr("Please sign in again.");
+    if(/Invalid login credentials/i.test(m)) return userErr("Student number or password is incorrect.");
+    if(/Email not confirmed/i.test(m)) return userErr("Please confirm your email first. Check your inbox for the link we sent.");
+    if(/already registered|already been registered|User already/i.test(m)) return userErr("That email is already registered. Sign in instead.");
+    if(/Database error saving new user/i.test(m)) return userErr("We couldn't save your registration. Check your details and try again.");
+    if(/rate limit/i.test(m)) return userErr("Too many attempts. Please wait a minute and try again.");
+    if(/Password should be/i.test(m)) return userErr("Choose a password with at least 6 characters.");
+    return userErr(m);
+  }
+  async function rpc(fn,args){ var r=await sb.rpc(fn,args||{}); if(r.error) throw friendly(r.error); return r.data; }
+  async function profile(){
+    var g=await sb.auth.getUser(); var u=g.data&&g.data.user; if(!u) return null;
+    var r=await sb.from("students").select("*").eq("user_id",u.id).maybeSingle();
+    if(r.error) throw friendly(r.error); if(!r.data) return null;
+    var bk=await sb.from("bookings").select("session_id,kind").eq("student_id",u.id);
+    var out={i:r.data.student_number,n:r.data.name,e:r.data.email,ph:r.data.phone,c:r.data.college,p:r.data.programme,l:r.data.level,s:null,g:null};
+    (bk.data||[]).forEach(function(x){ if(x.kind==="grasag") out.g=x.session_id; else out.s=x.session_id; });
+    return out;
+  }
+  async function staffMe(){ var rows=await rpc("my_staff"); return rows && rows[0] ? rows[0] : null; }
+  var lastRefresh=0;
+  async function refresh(){ lastRefresh=Date.now(); try{ var rows=await rpc("session_counts"); var c={}, k={}; (rows||[]).forEach(function(x){ c[x.session_id]=+x.booked; k[x.session_id]=+x.capacity; }); st.counts=c; st.caps=k; render(); }catch(e){} }
+  async function staffApi(body){
+    var s=await sb.auth.getSession(); var t=s.data&&s.data.session&&s.data.session.access_token;
+    var r=await fetch("/api/staff",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(t||"")},body:JSON.stringify(body)});
+    var j={}; try{ j=await r.json(); }catch(e){}
+    if(!r.ok) throw userErr(j.error||"Something went wrong. Please try again.");
+    return j;
+  }
+  return {
+    gas:true, remote:true, canDownload:true,
+    subscribe: function(){
+      refresh();
+      /* Every open page polls the seat counts. 30 s plus a random offset spreads thousands of
+         open pages evenly, and hidden tabs stop polling until the student comes back. */
+      setInterval(function(){ if(!document.hidden) refresh(); }, 30000 + Math.floor(Math.random()*10000));
+      document.addEventListener("visibilitychange", function(){ if(!document.hidden && Date.now()-lastRefresh > 20000) refresh(); });
+    },
+    refresh: refresh,
+    createAccount: async function(f){
+      if(await rpc("student_number_taken",{p_num:f.index})) throw userErr("This student number is already registered. Sign in instead.");
+      var r=await sb.auth.signUp({email:f.email,password:f.pw,options:{emailRedirectTo:location.origin+"/",data:{kind:"student",student_number:f.index,name:f.name,phone:f.phone,college:f.college,programme:f.programme,level:f.level}}});
+      if(r.error) throw friendly(r.error);
+      if(!r.data.session){ var e=userErr("Almost done. We've sent a confirmation link to "+f.email+". Open it, then sign in with your student number."); e.info=true; throw e; }
+      var p=await profile(); if(!p) throw userErr("We couldn't load your registration. Please sign in."); return p;
+    },
+    signIn: async function(num,pw){
+      var email=await rpc("login_email",{p_num:num});
+      if(!email) throw userErr("Student number or password is incorrect.");
+      var r=await sb.auth.signInWithPassword({email:email,password:pw}); if(r.error) throw friendly(r.error);
+      var p=await profile(); if(!p){ await sb.auth.signOut(); throw userErr("Student number or password is incorrect."); }
+      return p;
+    },
+    restoreStudent: async function(){ var s=await sb.auth.getSession(); if(!s.data||!s.data.session) return null; return profile(); },
+    register: async function(f){
+      var cur=st.booking||{};
+      if((f.sid||"")!==(cur.s||"")){ if(f.sid) await rpc("book_session",{p_session:f.sid}); else await rpc("cancel_booking",{p_kind:"college"}); }
+      if((f.gsid||"")!==(cur.g||"")){ if(f.gsid) await rpc("book_session",{p_session:f.gsid}); else await rpc("cancel_booking",{p_kind:"grasag"}); }
+      refresh(); return profile();
+    },
+    sendReset: async function(email){ var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/"}); if(r.error) throw friendly(r.error); },
+    setPassword: async function(pw){ var r=await sb.auth.updateUser({password:pw}); if(r.error) throw friendly(r.error); },
+    staffSetupNeeded: async function(){ return false; },
+    staffSignIn: async function(email,pw){
+      var r=await sb.auth.signInWithPassword({email:email,password:pw}); if(r.error){ var e=friendly(r.error); if(/Student number or password/.test(e.message)) e.message="Email or password is incorrect."; throw e; }
+      var u=await staffMe(); if(!u){ await sb.auth.signOut(); throw userErr("This account doesn't have staff access."); }
+      return u;
+    },
+    restoreStaff: async function(){ var s=await sb.auth.getSession(); if(!s.data||!s.data.session) return null; return staffMe(); },
+    adminData: async function(){
+      var all=[], from=0, size=1000;
+      for(;;){
+        var r=await sb.from("bookings").select("session_id,kind,created_at,student_id,students(student_number,name,email,phone,college,programme,level)").order("student_id",{ascending:true}).order("kind",{ascending:true}).range(from,from+size-1);
+        if(r.error) throw friendly(r.error);
+        all=all.concat(r.data||[]); if(!r.data || r.data.length<size) break; from+=size;
+      }
+      var by={};
+      all.forEach(function(x){ var p=x.students; if(!p) return; var o=by[x.student_id]||(by[x.student_id]={i:p.student_number,n:p.name,e:p.email,ph:p.phone,c:p.college,p:p.programme,l:p.level,s:null,g:null,t:Date.parse(x.created_at)});
+        if(x.kind==="grasag") o.g=x.session_id; else o.s=x.session_id; });
+      refresh();
+      return {rows:Object.keys(by).map(function(k){return by[k];}), url:""};
+    },
+    listStaff: async function(){ var j=await staffApi({action:"list"}); return (j.staff||[]).map(function(u){ return {user_id:u.user_id,email:u.email,name:u.name,role:u.role,college:u.college||""}; }); },
+    saveStaff: async function(a,u){ var ex=(st.staffList||[]).filter(function(x){return normEmail(x.email)===normEmail(u.email);})[0]; await staffApi({action:"save",user:{user_id:ex&&ex.user_id||null,name:u.name,email:u.email,role:u.role,college:u.college,password:u.h||""}}); },
+    deleteStaff: async function(a,email){ var ex=(st.staffList||[]).filter(function(x){return normEmail(x.email)===normEmail(email);})[0]; if(!ex) throw userErr("Staff member not found."); await staffApi({action:"delete",user_id:ex.user_id}); },
+    resetStudent: async function(a,key){
+      var email=null; Object.keys(st.seats).some(function(sid){ var seats=st.seats[sid]||{}; var r=seats[key]; if(r){ email=r.e; return true; } return false; });
+      if(!email) throw userErr("Couldn't find that student's email.");
+      var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/"}); if(r.error) throw friendly(r.error);
+      return email;
+    },
+    download: async function(name,csv){
+      var url=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}));
+      var a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },2000);
+    },
+    signOut: function(){ try{ sb.auth.signOut(); }catch(e){} }
+  };
+}
+
+/* ---------- Pieces ---------- */
+function bannerHTML(s){
+  var t=TRACKS[s.track];
+  return '<div class="banner" style="--hue:'+t.hue+'"><span class="trk">'+esc(t.name)+' · '+esc(DAYS[s.day].short)+'</span><span class="code">'+esc(t.code)+'</span></div>';
+}
+function seatPill(sid){
+  var l=left(sid);
+  if(mine(sid)) return '<span class="pill">Booked</span>';
+  if(l===0) return '<span class="pill full">Full</span>';
+  return '<span class="pill'+(l<=40?' warn':'')+'"><span class="mono">'+l+'</span> seats left</span>';
+}
+function meterHTML(sid){
+  var n=count(sid), l=left(sid), pct=Math.min(100,Math.round(n/cap(sid)*100));
+  return '<div style="display:grid;gap:4px"><div class="meter '+(l===0?'full':l<=40?'warn':'')+'" aria-hidden="true"><i style="width:'+pct+'%"></i></div><span class="muted" style="font-size:13px"><span class="mono">'+n+'</span> of '+cap(sid)+' booked</span></div>';
+}
+function metaRow(s){
+  return '<div class="metarow"><span>'+ICON.cal+esc(DAYS[s.day].short)+'</span><span>'+ICON.clock+'<span class="mono">'+esc(s.time)+'</span></span><span>'+ICON.live+'Online · '+esc(s.g?'GRASAG':TRACKS[s.track].name)+' live room</span></div>';
+}
+function audience(s){ return s.g ? 'For postgraduate students (GRASAG)' : 'For '+TRACKS[s.track].label+' students'; }
+function bookState(s){
+  if(mine(s.id)) return {label:"Booked", dis:true, ok:true};
+  if(left(s.id)===0) return {label:"Session full", dis:true, full:true};
+  var b=st.booking;
+  if(b && !s.g && collegesFor(s.track).every(function(c){return c.id!==b.c;})) return {label:"Other college", dis:true};
+  if(b && s.g && !isPG(b.l)) return {label:"Postgraduate only", dis:true};
+  return {label: b && ((s.g&&b.g)||(!s.g&&b.s)) ? "Switch to this" : "Book seat", dis:false};
+}
+function hcardHTML(s){
+  var t=TRACKS[s.track], bs=bookState(s);
+  return '<article class="hcard">'+bannerHTML(s)+'<div class="hbody"><div class="htop"><div style="display:grid;gap:6px;min-width:0"><span class="tag'+(s.g?' g':'')+'">'+esc(s.g?'GRASAG · Postgraduate':t.label)+'</span><h3>'+esc(s.title)+'</h3></div>'+seatPill(s.id)+'</div>'+
+    metaRow(s)+'<span class="muted" style="font-size:15px">'+ICON.user.replace('aria-hidden','style="vertical-align:-3px;margin-right:6px" aria-hidden')+esc(audience(s))+'</span>'+
+    (bs.full?'<div class="notice err" style="padding:10px 12px">All '+cap(s.id)+' seats in this session are taken. Please choose another session.</div>':'')+
+    '<div class="hfoot">'+meterHTML(s.id)+(bs.ok?'<button class="btn sm" data-act="toMine">View booking</button>':'<button class="btn primary" data-act="book" data-sid="'+s.id+'"'+(bs.dis?' disabled':'')+'>'+esc(bs.label)+'</button>')+'</div></div></article>';
+}
+function modeNotice(){
+  if(st.mode==="unconfigured") return '<div class="notice err">This site isn\'t connected to its database yet. Add SUPABASE_URL and SUPABASE_ANON_KEY in Vercel (Settings › Environment Variables), then redeploy.</div>';
+  if(st.mode==="connecting") return '<div class="notice">Connecting to live seat counts…</div>';
+  if(API && API.preview) return '<div class="notice">Preview mode: this copy isn\'t connected to the registration database, so nothing you enter here is saved.</div>';
+  return "";
+}
+function msgHTML(m){ m=m||st.msg; return m ? '<div class="notice '+(m.err?'err':'ok')+'" role="'+(m.err?'alert':'status')+'">'+esc(m.text)+'</div>' : ""; }
+function field(id,label,type,val,attrs,hint){
+  return '<div class="field"><label for="'+id+'">'+label+'</label><input id="'+id+'" name="'+id+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>'+(hint?'<span class="hint">'+esc(hint)+'</span>':'')+'</div>';
+}
+function startsIn(ms){
+  var d=ms-Date.now();
+  if(d<=0) return d>-90*60000 ? "Live now" : "Session ended";
+  var days=Math.floor(d/864e5), h=Math.floor(d%864e5/36e5), m=Math.floor(d%36e5/6e4);
+  return "Starts in "+(days?days+"d ":"")+h+"h "+m+"m";
+}
+function trackOf(cid){ return (COLLEGES.filter(function(c){return c.id===cid;})[0]||{}).track||""; }
+function visible(){ if(!st.myCol) return []; var t=trackOf(st.myCol); return SESSIONS.filter(function(s){ return s.g ? st.myPG : s.track===t; }); }
+function setCollege(cid,pg){ st.myCol=cid||""; st.myPG=!!pg; try{ if(cid) localStorage.setItem("gw-col",JSON.stringify({c:cid,pg:!!pg})); else localStorage.removeItem("gw-col"); }catch(e){} }
+function fromBooking(b){ if(b) setCollege(b.c, isPG(b.l)); }
+function myIds(){ var b=st.booking; return b ? [b.s,b.g].filter(Boolean) : []; }
+function matchesQ(s){
+  var q=st.q.trim().toLowerCase(); if(!q) return true;
+  var t=TRACKS[s.track];
+  var hay=[t.code,t.label,t.name,s.title,DAYS[s.day].date,s.time,s.g?"grasag postgraduate":"",collegesFor(s.track).map(function(c){return c.name+" "+c.id;}).join(" ")].join(" ").toLowerCase();
+  return q.split(/\s+/).every(function(w){ return hay.indexOf(w)>=0; });
+}
+
+/* ---------- Shell ---------- */
+var NAV=[["dash","Dashboard","dash"],["mine","My Sessions","book"],["schedule","Schedule","sched"]];
+function renderNav(){
+  var items;
+  if(st.staff){ items=[["admin","Registrations","org"]]; if(st.staff.role==="super") items.push(["users","Staff & roles","users"]); }
+  else items=NAV.slice();
+  var html=function(){
+    return items.map(function(n){
+      var cnt = n[0]==="mine" && st.booking ? '<span class="count">'+myIds().length+'</span>' : '';
+      return '<button class="nav" data-nav="'+n[0]+'"'+(st.view===n[0]?' aria-current="page"':'')+'>'+ICON[n[2]]+'<span>'+n[1]+'</span>'+cnt+'</button>';
+    }).join("");
+  };
+  var out='<button class="nav" data-act="signOut">'+ICON.out+'<span>Sign out</span></button>';
+  document.getElementById("sideNav").innerHTML = html() + '<div class="navgroup">Account</div>' + out;
+  document.getElementById("mobileNav").innerHTML = html() + out;
+  var who = st.staff ? {n:st.staff.name, r:ROLES[st.staff.role]+(st.staff.role==="coord"?" · "+st.staff.college:"")} : st.booking ? {n:st.booking.n, r:isPG(st.booking.l)?'Postgraduate student':'Student'} : null;
+  var w=document.getElementById("whoami");
+  if(who){ var ini=String(who.n||"?").trim().split(/\s+/).map(function(x){return x[0];}).slice(0,2).join("").toUpperCase();
+    w.innerHTML='<div class="whoami"><span class="avatar" aria-hidden="true">'+esc(ini)+'</span><span style="min-width:0"><span class="nm" style="display:block">'+esc(who.n)+'</span><span class="rl">'+esc(who.r)+'</span></span></div>';
+  } else w.innerHTML='';
+}
+
+/* ---------- Views ---------- */
+function renderDash(){
+  var b=st.booking;
+  var vis=visible(); var open=vis.filter(function(s){return left(s.id)>0;}).length;
+  var upcoming=myIds().filter(function(id){ return startOf(BY_ID[id])>Date.now(); }).length;
+  var next=myIds().map(function(id){return BY_ID[id];}).sort(function(a,c){return startOf(a)-startOf(c);})[0];
+  var target = next ? startOf(next) : FIRST_START;
+  var h=modeNotice()+msgHTML();
+  h+='<section class="welcome"><div><h1>'+(b?'Welcome back, '+esc(String(b.n).split(/\s+/)[0]):'Welcome')+'</h1>'+
+    '<p>'+(myIds().length?'Your seat is saved. You can see it under My Sessions.':'Choose a session for your college below to save your seat.')+'</p>'+
+    '<div class="btns"><button class="btn" data-act="toList">Browse sessions</button><button class="btn alt" data-act="toMine">'+(b?'View my sessions':'Find my booking')+'</button></div></div>'+
+    (st.myCol?'<div class="bigstat"><b>'+(st.mode==="connecting"?'—':open)+'</b><span>open sessions for you</span></div>':'')+'</section>';
+  h+='<section class="stats" aria-label="Summary">'+
+    '<div class="stat"><span class="ic a">'+ICON.ticket+'</span><span class="lb">Sessions booked</span><span class="vl">'+myIds().length+'</span><span class="sub">'+(b?[b.s?'College session':'',b.g?'GRASAG session':''].filter(Boolean).join(' + ')||'None yet':'Find your booking to see it here')+'</span></div>'+
+    '<div class="stat"><span class="ic">'+ICON.sched.replace(/width="18" height="18"/,'width="20" height="20"')+'</span><span class="lb">Upcoming sessions</span><span class="vl">'+upcoming+'</span><span class="sub">'+(next?esc(longLabel(next)):'Nothing booked yet')+'</span></div>'+
+    '<div class="stat"><span class="ic">'+ICON.timer+'</span><span class="lb">'+(next?'Your next session in':'First session starts in')+'</span><span class="vl mono" style="font-size:28px" data-cd="'+target+'">'+esc(cdText(target))+'</span><span class="sub">'+esc(next?DAYS[next.day].date:'Tuesday 17 November, 10:00 AM')+'</span></div></section>';
+  h+='<section style="display:grid;gap:18px;grid-template-columns:minmax(0,1fr)" id="sessions">';
+  if(!st.myCol) return h+pickerHTML()+'</section>';
+  var list=vis.filter(matchesQ);
+  var t=TRACKS[trackOf(st.myCol)];
+  h+='<div class="sec-head"><div><h2>Your sessions</h2><p>'+esc(collegeName(st.myCol))+' · '+esc(t.name)+' · '+esc(DAYS[t.day].date)+(st.myPG?' · plus GRASAG sessions':'')+'</p></div>'+
+    (st.booking?'':'<button class="btn sm" data-act="changeCol">Change college</button>')+'</div>';
+  if(st.q) h+='<p class="muted" style="margin:0">Showing results for “'+esc(st.q)+'”.</p>';
+  var col=list.filter(function(s){return !s.g;}), gr=list.filter(function(s){return s.g;});
+  if(!list.length) h+='<div class="empty">No sessions match your search.</div>';
+  var colAll=vis.filter(function(s){return !s.g;});
+  if(st.booking && !st.booking.s && colAll.length && colAll.every(function(s){return left(s.id)===0;})) h+='<div class="notice err" role="alert">All sessions for your college are full. Please contact the workshop organisers. They can tell you if a seat opens up.</div>';
+  if(col.length) h+='<div class="list">'+col.map(hcardHTML).join("")+'</div>';
+  if(gr.length) h+='<div class="sec-head" style="margin-top:8px"><div><h2>GRASAG sessions</h2><p>One dedicated postgraduate session on Tuesday, Wednesday and Thursday. You can book one in addition to your college session.</p></div></div><div class="list">'+gr.map(hcardHTML).join("")+'</div>';
+  return h+'</section>';
+}
+function pickerHTML(){
+  return '<form id="colForm" class="panel grid" novalidate><div class="span2"><h2>Find your sessions</h2><p class="muted" style="margin:6px 0 0">Choose your college and we\'ll show only the sessions for your college.</p></div>'+
+    '<div class="field"><label for="pickCol">Your college</label><select id="pickCol" required><option value="">Choose your college</option>'+COLLEGES.map(function(c){return '<option value="'+c.id+'"'+(st.pickCol===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join("")+'</select></div>'+
+    '<div class="field"><label for="pickPG">Study level</label><select id="pickPG" required><option value="">Choose your level</option><option value="ug"'+(st.pickPG==="ug"?' selected':'')+'>Undergraduate</option><option value="pg"'+(st.pickPG==="pg"?' selected':'')+'>Postgraduate (GRASAG)</option></select></div>'+
+    '<div class="span2 btns"><button class="btn primary" type="submit">Show my sessions</button><span class="muted">Already registered? <button type="button" class="linkbtn" data-act="toMine">Find my booking</button></span></div></form>';
+}
+function cdText(target){
+  var d=Math.max(0,target-Date.now());
+  return Math.floor(d/864e5)+"d "+String(Math.floor(d%864e5/36e5)).padStart(2,"0")+"h "+String(Math.floor(d%36e5/6e4)).padStart(2,"0")+"m";
+}
+function bookedCard(sid){
+  var s=BY_ID[sid], t=TRACKS[s.track];
+  var h='<article class="hcard">'+bannerHTML(s)+'<div class="hbody"><div class="htop"><div style="display:grid;gap:6px;min-width:0"><span class="startsin" data-start="'+startOf(s)+'">'+esc(startsIn(startOf(s)))+'</span>'+
+    '<span class="tag'+(s.g?' g':'')+'">'+esc(s.g?'GRASAG · Postgraduate':t.label)+'</span><h3>'+esc(s.title)+'</h3></div><span class="pill">Confirmed</span></div>'+metaRow(s)+
+    '<span class="muted" style="font-size:15px">'+esc(DAYS[s.day].date)+'</span><div class="hfoot">';
+  if(st.confirmDrop===sid){
+    h+='<span style="color:var(--full);font-weight:700">Give up this seat? It goes to another student.</span><div class="btns"><button class="btn danger sm" data-act="doDrop" data-sid="'+sid+'"'+(st.busy?' disabled':'')+'>'+(st.busy?'Releasing…':'Yes, release it')+'</button><button class="btn sm" data-act="noDrop">Keep it</button></div>';
+  } else {
+    h+='<span class="muted" style="font-size:14px">Sign in to your student Google account before the session.</span><div class="btns"><button class="btn sm" data-act="change" data-sid="'+sid+'">Change session</button><button class="btn danger sm" data-act="askDrop" data-sid="'+sid+'">Cancel</button></div>';
+  }
+  return h+'</div></div></article>';
+}
+function renderMine(){
+  var h=modeNotice()+msgHTML();
+  var b=st.booking;
+  if(!b){
+    return h+'<div class="sec-head"><div><h2>My Sessions</h2><p>Enter your student number and the email you registered with to see, change or cancel your sessions.</p></div></div>'+
+      '<form id="findForm" class="panel grid" novalidate>'+field("findIndex","Student number","text",st.find.index,'inputmode="numeric" required')+field("findEmail","Email used to register","email",st.find.email,'autocomplete="email" required')+
+      '<div class="span2 btns"><button class="btn primary" type="submit"'+(st.busy?' disabled':'')+'>'+(st.busy?'Searching…':'Find my booking')+'</button><span class="muted">Not registered yet? <button type="button" class="linkbtn" data-act="toList">Browse sessions</button></span></div></form>';
+  }
+  var ini=String(b.n||"?").trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
+  h+='<div class="sec-head"><div><h2>My Sessions</h2><p>The joining link for each session will be shared by the organisers.</p></div></div>';
+  h+='<div class="dash"><aside class="profile panel"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div><h3>'+esc(b.n)+'</h3><span class="muted">'+esc(b.l)+'</span></div>'+
+    '<dl><div><dt>Student number</dt><dd class="mono">'+esc(b.i)+'</dd></div><div><dt>Email</dt><dd>'+esc(b.e)+'</dd></div><div><dt>Phone</dt><dd class="mono">'+esc(b.ph||'—')+'</dd></div><div><dt>College</dt><dd>'+esc(collegeName(b.c))+'</dd></div><div><dt>Programme</dt><dd>'+esc(b.p)+'</dd></div></dl>'+
+    '<button class="linkbtn" data-act="signOut" style="justify-self:start">Not you? Sign out</button></aside><section class="list" style="min-width:0">';
+  if(b.s) h+=bookedCard(b.s); else h+='<div class="empty">You don\'t have a college session yet. <button class="linkbtn" data-act="findCollege">Find a session for your college</button></div>';
+  if(b.g) h+=bookedCard(b.g);
+  else if(isPG(b.l)) h+='<div class="prompt"><div><strong>You can also join a GRASAG session</strong><div class="muted" style="font-size:14px">One dedicated postgraduate session runs on Tuesday, Wednesday and Thursday.</div></div><button class="btn sm" data-act="findGrasag">See GRASAG sessions</button></div>';
+  return h+'</section></div>';
+}
+function renderSchedule(){
+  var h=modeNotice()+'<div class="sec-head"><div><h2>Schedule</h2><p>'+(st.myCol?'Your sessions for '+esc(collegeName(st.myCol))+'. Times are Ghana time (GMT).':'Choose your college to see your schedule.')+'</p></div></div>';
+  if(!st.myCol) return h+pickerHTML();
+  var vt={}; visible().forEach(function(s){ vt[s.track]=1; });
+  DAY_ORDER.forEach(function(d){
+    var tracks=Object.keys(TRACKS).filter(function(k){return TRACKS[k].day===d && vt[k];});
+    if(!tracks.length) return;
+    var slots=[1,2,3,4,5].filter(function(n){ return tracks.some(function(k){return BY_ID[k+"-"+n];}); });
+    h+='<section style="display:grid;gap:10px;grid-template-columns:minmax(0,1fr)"><h3>'+esc(DAYS[d].date)+'</h3><div class="sched panel" style="padding:0"><table><thead><tr><th>Time</th>'+
+      tracks.map(function(k){return '<th>'+esc(TRACKS[k].name)+' · '+esc(TRACKS[k].code)+'</th>';}).join("")+'</tr></thead><tbody>';
+    slots.forEach(function(n){
+      h+='<tr><td class="mono" style="white-space:nowrap">'+esc(SLOTS[n])+'</td>';
+      tracks.forEach(function(k){ var s=BY_ID[k+"-"+n];
+        h+= s ? '<td><div class="cell"><span class="t">'+esc(s.title)+(mine(s.id)?' <span class="pill">Booked</span>':'')+'</span>'+meterHTML(s.id)+'</div></td>' : '<td class="muted">—</td>'; });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div></section>';
+  });
+  return h;
+}
+function renderSheet(){
+  var s=BY_ID[st.pick]; if(!s) return "";
+  var t=TRACKS[s.track], b=st.booking;
+  var replacing = b && (s.g ? b.g : b.s);
+  var h='<div class="sheet" data-act="closeBg"><div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">'+
+    '<div class="sheet-top"><div><div class="eyebrow muted">Confirm your seat</div><h2 id="sheetTitle">'+esc(t.code)+' · '+esc(s.title)+'</h2></div><button class="iconbtn" data-act="close" aria-label="Close">'+ICON.x+'</button></div>'+
+    '<div class="summary" style="--hue:'+t.hue+'"><strong>'+esc(DAYS[s.day].date)+'</strong><span class="mono">'+esc(s.time)+'</span><span class="muted" style="font-size:14px">Online · '+esc(s.g?'GRASAG':t.name)+' live room · '+left(s.id)+' of '+cap(s.id)+' seats left</span></div>'+
+    '<dl class="confirm-dl"><dt>Name</dt><dd>'+esc(b.n)+'</dd><dt>Student number</dt><dd class="mono">'+esc(b.i)+'</dd><dt>College</dt><dd>'+esc(collegeName(b.c))+'</dd></dl>';
+  if(replacing) h+='<div class="notice">This replaces your current booking: <b>'+esc(longLabel(BY_ID[replacing]))+'</b>.</div>';
+  h+=msgHTML(st.sheetMsg);
+  return h+'<div class="btns"><button class="btn primary" data-act="confirmBook"'+(st.busy?' disabled':'')+'>'+(st.busy?'Saving…':'Confirm booking')+'</button><button class="btn" data-act="close">Back to sessions</button></div></div></div>';
+}
+function scopeSessions(){
+  if(st.staff && st.staff.role==="coord"){ var t=trackOf(st.staff.college); return SESSIONS.filter(function(s){ return s.track===t || s.g; }); }
+  return SESSIONS;
+}
+function allRows(){
+  var rows=[], coord = st.staff && st.staff.role==="coord" ? st.staff.college : null;
+  scopeSessions().forEach(function(s){ var seats=st.seats[s.id]||{}; Object.keys(seats).forEach(function(k){ var r=seats[k]; if(r && (!coord || r.c===coord)) rows.push({sid:s.id,r:r}); }); });
+  return rows;
+}
+function renderAdmin(){
+  var h=msgHTML(), role=st.staff.role, rows=allRows(), sess=scopeSessions();
+  var by={}; rows.forEach(function(x){ by[x.sid]=(by[x.sid]||0)+1; });
+  var people={}; rows.forEach(function(x){ people[normIndex(x.r.i)]=1; });
+  var q=st.adminQ.trim().toLowerCase();
+  h+='<div class="sec-head"><div><h2>Registrations</h2><p>'+(role==="coord"?'Students from '+esc(collegeName(st.staff.college))+'.':'All colleges and GRASAG.')+'</p></div></div>';
+  h+='<section class="stats" aria-label="Summary"><div class="stat"><span class="ic a">'+ICON.users.replace(/width="18" height="18"/,'width="20" height="20"')+'</span><span class="lb">Students with a seat</span><span class="vl">'+Object.keys(people).length+'</span></div>'+
+    '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Seats booked</span><span class="vl">'+rows.length+'</span></div>'+
+    '<div class="stat"><span class="ic">'+ICON.seat+'</span><span class="lb">Full sessions</span><span class="vl">'+sess.filter(function(s){return left(s.id)===0;}).length+'</span><span class="sub">of '+sess.length+' sessions</span></div></section>';
+  h+='<div class="toolbar"><div class="field"><label for="adminQ">Search students</label><input id="adminQ" type="search" value="'+esc(st.adminQ)+'" placeholder="Name, student number, email or phone"></div><div class="btns">';
+  if(API && API.canDownload) h+='<button class="btn" data-act="csv">Download CSV</button>';
+  if(st.sheetUrl && role!=="coord") h+='<a class="btn" href="'+esc(st.sheetUrl)+'" target="_blank" rel="noopener">Open Google Sheet</a>';
+  if(API && API.gas) h+='<button class="btn" data-act="gasReload">Refresh</button>';
+  h+='</div></div>';
+  if(q){
+    var hits=rows.filter(function(x){ return [x.r.n,x.r.i,x.r.e,x.r.ph].join(" ").toLowerCase().indexOf(q)>=0; });
+    return h+'<div class="sched panel" style="padding:0">'+rosterTable(hits,true)+'</div>';
+  }
+  h+='<div class="sched panel" style="padding:0"><table class="admin-table"><thead><tr><th>Day</th><th>Track</th><th>Session</th><th class="num">'+(role==="coord"?'Your students':'Booked')+'</th><th class="num">Seats left</th><th></th></tr></thead><tbody>';
+  sess.forEach(function(s){
+    var open=!!st.adminOpen[s.id], l=left(s.id);
+    h+='<tr><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+'</td><td class="num mono">'+(by[s.id]||0)+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
+      '<td><button class="linkbtn" data-act="toggle" data-sid="'+s.id+'" aria-expanded="'+open+'">'+(open?'Hide list':'View list')+'</button></td></tr>';
+    if(open){ var list=rows.filter(function(x){return x.sid===s.id;}); h+='<tr class="roster"><td colspan="6">'+(list.length?rosterTable(list,false):'<div class="empty">No one has booked this session yet.</div>')+'</td></tr>'; }
+  });
+  return h+'</tbody></table></div>';
+}
+function rosterTable(rows,withSession){
+  if(!rows.length) return '<div class="empty">No matching registrations.</div>';
+  var canReset = st.staff && st.staff.role!=="coord";
+  rows.sort(function(a,b){ return String(a.r.n).localeCompare(String(b.r.n)); });
+  return '<table><thead><tr><th>Name</th><th>Student no.</th><th>Email</th><th>Phone</th><th>College</th><th>Programme</th><th>Level</th>'+(withSession?'<th>Session</th>':'')+(canReset?'<th></th>':'')+'</tr></thead><tbody>'+
+    rows.map(function(x){ var k=normIndex(x.r.i); return '<tr><td>'+esc(x.r.n)+'</td><td class="mono">'+esc(x.r.i)+'</td><td>'+esc(x.r.e)+'</td><td class="mono">'+esc(x.r.ph||'')+'</td><td>'+esc(x.r.c)+'</td><td>'+esc(x.r.p)+'</td><td>'+esc(x.r.l)+'</td>'+(withSession?'<td>'+esc(longLabel(BY_ID[x.sid]))+'</td>':'')+
+      (canReset?'<td>'+(st.resetDone===k?'<span class="pill">Email sent</span>':'<button class="linkbtn" data-act="resetPw" data-key="'+esc(k)+'">Send password reset</button>')+'</td>':'')+'</tr>'; }).join("")+'</tbody></table>';
+}
+function renderUsers(){
+  var h=msgHTML();
+  h+='<div class="sec-head"><div><h2>Staff &amp; roles</h2><p>Create staff accounts and choose what each person can see.</p></div><button class="btn primary sm" data-act="newStaff">Add staff member</button></div>';
+  h+='<div class="stats"><div class="stat"><span class="lb"><b>Super admin</b></span><span class="sub">Sees everything, manages staff accounts and roles, sends student password resets.</span></div>'+
+    '<div class="stat"><span class="lb"><b>Organiser</b></span><span class="sub">Sees every college\'s registrations, downloads lists, sends student password resets.</span></div>'+
+    '<div class="stat"><span class="lb"><b>College coordinator</b></span><span class="sub">Sees only the students from their own college.</span></div></div>';
+  var F=st.staffForm;
+  if(F){
+    h+='<form id="staffForm" class="panel grid" novalidate><div class="span2"><h3>'+(F.edit?'Edit '+esc(F.name):'New staff member')+'</h3></div>'+
+      sfield("name","Full name","text",F.name,'required')+sfield("email","Email","email",F.email,'required'+(F.edit?' readonly':''))+
+      '<div class="field"><label for="sf.role">Role</label><select id="sf.role" data-sf="role">'+Object.keys(ROLES).map(function(r){return '<option value="'+r+'"'+(F.role===r?' selected':'')+'>'+ROLES[r]+'</option>';}).join("")+'</select></div>'+
+      (F.role==="coord"?'<div class="field"><label for="sf.college">College</label><select id="sf.college" data-sf="college"><option value="">Choose a college</option>'+COLLEGES.map(function(c){return '<option value="'+c.id+'"'+(F.college===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join("")+'</select></div>':'<div></div>')+
+      sfield("pw",F.edit?"New password (optional)":"Password","password",F.pw,'autocomplete="new-password" placeholder="'+(F.edit?'Leave blank to keep the current one':'At least 6 characters')+'"')+'<div></div>'+
+      '<div class="span2 btns"><button class="btn primary" type="submit"'+(st.busy?' disabled':'')+'>'+(st.busy?'Saving…':'Save')+'</button><button type="button" class="btn" data-act="cancelStaff">Cancel</button></div></form>';
+  }
+  if(st.staffList===null) return h+'<div class="empty">Loading staff…</div>';
+  h+='<div class="sched panel" style="padding:0"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>College</th><th></th></tr></thead><tbody>'+
+    st.staffList.slice().sort(function(a,b){return String(a.name).localeCompare(String(b.name));}).map(function(u){
+      var me=normEmail(u.email)===normEmail(st.staff.email);
+      return '<tr><td>'+esc(u.name)+(me?' <span class="pill plain">You</span>':'')+'</td><td>'+esc(u.email)+'</td><td><span class="pill'+(u.role==="super"?'':u.role==="organiser"?' g':' plain')+'">'+esc(ROLES[u.role]||u.role)+'</span></td><td>'+esc(u.college?collegeName(u.college):'—')+'</td>'+
+        '<td><div class="btns"><button class="linkbtn" data-act="editStaff" data-email="'+esc(u.email)+'">Edit</button>'+(me?'':(st.confirmStaff===u.email?'<button class="btn danger sm" data-act="delStaff" data-email="'+esc(u.email)+'">Confirm remove</button>':'<button class="linkbtn" data-act="askDelStaff" data-email="'+esc(u.email)+'">Remove</button>'))+'</div></td></tr>';
+    }).join("")+'</tbody></table></div>';
+  return h;
+}
+function sfield(k,label,type,val,attrs){ return '<div class="field"><label for="sf.'+k+'">'+label+'</label><input id="sf.'+k+'" data-sf="'+k+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'></div>'; }
+
+/* ---------- Sign-in / create account ---------- */
+function authHTML(){
+  var A=st.auth, up=A.up, inn=A.in;
+  A.tab = st.portal==="staff" ? "staff" : (A.tab==="staff" ? "in" : A.tab);
+  var h='<div class="auth"><section class="auth-side"><div class="stripe" aria-hidden="true"></div><div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Gemini Workshop</b></span></div>'+
+    (st.portal==="staff"
+      ? '<div style="display:grid;gap:14px"><span class="eyebrow" style="color:var(--hero-muted)">Staff portal</span><h1>Gemini &amp; Google Workspace Workshop</h1><p>For super admins, organisers and college coordinators managing workshop registrations.</p>'+
+        '<ul class="ticks"><li>See registrations and seat counts live</li><li>Download attendee lists</li><li>Manage staff accounts and roles</li></ul></div>'
+      : '<div style="display:grid;gap:14px"><h1>Gemini &amp; Google Workspace Workshop</h1><p>Live 90-minute online sessions on using Gemini in Docs, Sheets, Slides, Forms and Colab for your coursework, responsibly.</p>'+
+        '<ul class="ticks"><li>Register with your student number</li><li>See only the sessions for your college</li><li>Choose a session and save your seat. 400 seats per session</li></ul></div>')+
+    '<span aria-hidden="true"></span></section>';
+  h+='<section class="auth-main"><div class="auth-card">'+modeNotice()+
+    '<div class="seg" role="tablist" aria-label="Sign in or register"><button role="tab" data-act="authTab" data-tab="in" aria-selected="'+(A.tab==="in")+'">Sign in</button><button role="tab" data-act="authTab" data-tab="up" aria-selected="'+(A.tab==="up")+'">Register</button></div>'+msgHTML(A.msg);
+  if(A.tab==="staff"){
+    h=h.replace(/<div class="seg"[\s\S]*?<\/div>/,'');
+    if(st.setupNeeded===null){ h+='<div class="empty">Checking staff accounts…</div>'; }
+    else if(st.setupNeeded){
+      var S=A.setup;
+      h+='<div><h2>Set up the super admin</h2><p class="muted" style="margin:6px 0 0">No staff accounts exist yet. Create the first super admin, who can then add other staff.</p></div>';
+      if(!(API && (API.gas || API.preview)) && !st.owner) h+='<div class="notice">Only the owner of this site can create the first super admin.</div>';
+      else h+='<form id="setupForm" class="grid" novalidate>'+(API&&API.gas?'<div class="span2">'+afield("setup.code","Setup passcode","password",S.code,'required','The ADMIN_PASSCODE set in Apps Script')+'</div>':'')+
+        '<div class="span2">'+afield("setup.name","Full name","text",S.name,'required')+'</div><div class="span2">'+afield("setup.email","Email","email",S.email,'autocomplete="username" required')+'</div>'+
+        afield("setup.pw","Password","password",S.pw,'autocomplete="new-password" placeholder="At least 6 characters" required')+afield("setup.pw2","Confirm password","password",S.pw2,'autocomplete="new-password" required')+
+        '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>Create super admin</button></div></form>';
+    } else {
+      h+='<div><h2>Staff sign in</h2><p class="muted" style="margin:6px 0 0">For organisers, coordinators and administrators.</p></div>'+
+        '<form id="staffIn" class="grid" novalidate><div class="span2">'+afield("st.email","Email","email",A.st.email,'autocomplete="username" required')+'</div>'+
+        '<div class="span2">'+afield("st.pw","Password","password",A.st.pw,'autocomplete="current-password" required')+'</div>'+
+        '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Signing in…':'Sign in')+'</button></div></form>';
+    }
+    return h+'</div></section></div>';
+  }
+  if(A.tab==="forgot"||A.tab==="newpw"){
+    h=h.replace(/<div class="seg"[\s\S]*?<\/div>/,'');
+    if(A.tab==="forgot"){
+      h+='<div><h2>Reset your password</h2><p class="muted" style="margin:6px 0 0">Enter the email you registered with. We\'ll send you a link to choose a new password.</p></div>'+
+        '<form id="forgotForm" class="grid" novalidate><div class="span2">'+afield("fg.email","Email","email",(A.fg&&A.fg.email)||"",'autocomplete="email" required')+'</div>'+
+        '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Sending…':'Send reset link')+'</button></div></form>';
+    } else {
+      h+='<div><h2>Choose a new password</h2><p class="muted" style="margin:6px 0 0">Enter your new password twice.</p></div>'+
+        '<form id="newpwForm" class="grid" novalidate>'+afield("np.pw","New password","password",(A.np&&A.np.pw)||"",'autocomplete="new-password" placeholder="At least 6 characters" required')+afield("np.pw2","Confirm password","password",(A.np&&A.np.pw2)||"",'autocomplete="new-password" required')+
+        '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Saving…':'Save new password')+'</button></div></form>';
+    }
+    h+='<p style="margin:0"><button class="linkbtn" data-act="authTab" data-tab="in">Back to sign in</button></p>';
+    return h+'</div></section></div>';
+  }
+  if(A.tab==="in"){
+    h+='<div><h2>Welcome back</h2><p class="muted" style="margin:6px 0 0">Sign in to see your sessions and bookings.</p></div>'+
+      '<form id="inForm" class="grid" novalidate><div class="span2">'+afield("in.index","Student number","text",inn.index,'inputmode="numeric" autocomplete="username" required')+'</div>'+
+      '<div class="span2">'+afield("in.pw","Password","password",inn.pw,'autocomplete="current-password" required')+'</div>'+
+      '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Signing in…':'Sign in')+'</button></div>'+
+      '<p class="span2" style="margin:0;font-size:14px"><button type="button" class="linkbtn" data-act="authTab" data-tab="forgot">Forgot your password?</button></p></form>'+
+      '<p style="margin:0">New here? <button class="linkbtn" data-act="authTab" data-tab="up">Register</button></p>';
+  } else {
+    h+='<div><h2>Register</h2><p class="muted" style="margin:6px 0 0">You\'ll choose your session right after this.</p></div>'+
+      '<form id="upForm" class="grid" novalidate>'+
+      '<div class="span2">'+afield("up.name","Full name","text",up.name,'autocomplete="name" required')+'</div>'+
+      afield("up.index","Student number","text",up.index,'inputmode="numeric" autocomplete="username" required')+
+      afield("up.phone","Phone number","tel",up.phone,'autocomplete="tel" inputmode="tel" placeholder="e.g. 024 123 4567" required')+
+      '<div class="span2">'+afield("up.email","Student email","email",up.email,'autocomplete="email" required')+'</div>'+
+      '<div class="field span2"><label for="up.college">College</label><select id="up.college" data-auth="up.college" required><option value="">Choose your college</option>'+
+        COLLEGES.map(function(c){return '<option value="'+c.id+'"'+(up.college===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join("")+'</select></div>'+
+      '<div class="field"><label for="up.level">Level</label><select id="up.level" data-auth="up.level" required><option value="">Choose your level</option>'+
+        LEVELS.map(function(l){return '<option'+(up.level===l?' selected':'')+'>'+esc(l)+'</option>';}).join("")+'</select></div>'+
+      afield("up.programme","Programme of study","text",up.programme,'placeholder="e.g. BSc Civil Engineering" required')+
+      afield("up.pw","Password","password",up.pw,'autocomplete="new-password" placeholder="At least 6 characters" required')+
+      afield("up.pw2","Confirm password","password",up.pw2,'autocomplete="new-password" required')+
+      '<div class="span2 btns"><button class="btn primary wide" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Registering…':'Register')+'</button></div></form>'+
+      '<p style="margin:0">Already registered? <button class="linkbtn" data-act="authTab" data-tab="in">Sign in</button></p>';
+  }
+  return h+'</div></section></div>';
+}
+function afield(id,label,type,val,attrs,hint){
+  return '<div class="field"><label for="'+id+'">'+label+'</label><input id="'+id+'" data-auth="'+id+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>'+(hint?'<span class="hint">'+esc(hint)+'</span>':'')+'</div>';
+}
+function signedIn(r,h){ st.booking=r; st.h=h; remember(r,h); fromBooking(r); st.auth.busy=false; st.auth.msg=null; st.auth.in={index:"",pw:""}; st.auth.up=BLANKUP(); }
+async function submitIn(){
+  if(st.auth.busy) return;
+  var A=st.auth, key=normIndex(A.in.index);
+  if(!key||!A.in.pw){ A.msg={err:true,text:"Enter your student number and password."}; render(); return; }
+  A.busy=true; A.msg=null; render();
+  try{ var r=await API.signIn(A.in.index.trim(),A.in.pw); signedIn(r,""); st.view="dash"; st.msg=null; render(); window.scrollTo(0,0); return; }
+  catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't sign in right now. Check your connection and try again."}; }
+  A.busy=false; render();
+}
+async function submitUp(){
+  if(st.auth.busy) return;
+  var A=st.auth, f=A.up, key=normIndex(f.index), email=normEmail(f.email), miss=[];
+  if(!f.name.trim()) miss.push("your full name");
+  if(!key) miss.push("student number");
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) miss.push("a valid email");
+  if(f.phone.replace(/[^0-9]/g,"").length<9) miss.push("a valid phone number");
+  if(!f.college) miss.push("college");
+  if(!f.level) miss.push("level");
+  if(!f.programme.trim()) miss.push("programme");
+  if(miss.length){ A.msg={err:true,text:"Please add "+miss.join(", ")+"."}; render(); return; }
+  if(f.pw.length<6){ A.msg={err:true,text:"Choose a password with at least 6 characters."}; render(); return; }
+  if(f.pw!==f.pw2){ A.msg={err:true,text:"The two passwords don't match."}; render(); return; }
+  A.busy=true; A.msg=null; render();
+  try{
+    var r=await API.createAccount({key:key,index:f.index.trim(),name:f.name.trim(),email:email,phone:f.phone.trim(),college:f.college,programme:f.programme.trim(),level:f.level,pw:f.pw});
+    signedIn(r,""); st.view="dash"; st.msg={text:"You're registered. Now choose your session below."}; render(); toList(); return;
+  }catch(err){ A.msg={err:!err.info,text:err.user?err.message:"Couldn't complete your registration. Check your connection and try again."}; if(err.info){ A.tab="in"; A.in.index=f.index; A.up=BLANKUP(); } }
+  A.busy=false; render();
+}
+
+async function submitForgot(){
+  var A=st.auth, email=normEmail(A.fg.email);
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ A.msg={err:true,text:"Enter the email you registered with."}; render(); return; }
+  A.busy=true; A.msg=null; render();
+  try{ await API.sendReset(email); A.msg={text:"If that email is registered, a reset link is on its way. Check your inbox."}; }
+  catch(err){ A.msg={err:true,text:err.message}; }
+  A.busy=false; render();
+}
+async function submitNewPw(){
+  var A=st.auth;
+  if(A.np.pw.length<6){ A.msg={err:true,text:"Choose a password with at least 6 characters."}; render(); return; }
+  if(A.np.pw!==A.np.pw2){ A.msg={err:true,text:"The two passwords don't match."}; render(); return; }
+  A.busy=true; A.msg=null; render();
+  try{
+    await API.setPassword(A.np.pw); A.np={pw:"",pw2:""};
+    try{ history.replaceState(null,"",location.pathname); }catch(e){}
+    var r=await API.restoreStudent();
+    if(r){ signedIn(r,""); st.msg={text:"Your password has been changed."}; }
+    else { A.tab="in"; A.msg={text:"Your password has been changed. Sign in with your new password."}; }
+  }catch(err){ A.msg={err:true,text:err.message}; }
+  A.busy=false; render();
+}
+function staffSignedIn(u,h){ st.staff=u; st.sh=""; st.auth.busy=false; st.auth.msg=null; st.auth.st={email:"",pw:""}; st.view="admin"; }
+function staffAuthObj(){ return {email:st.staff.email,h:st.sh}; }
+async function submitStaffIn(){
+  if(st.auth.busy) return;
+  var A=st.auth, email=normEmail(A.st.email);
+  if(!email||!A.st.pw){ A.msg={err:true,text:"Enter your email and password."}; render(); return; }
+  A.busy=true; A.msg=null; render();
+  try{ var u=await API.staffSignIn(email,A.st.pw); staffSignedIn(u,""); await loadAdmin(); render(); return; }
+  catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't sign in right now."}; }
+  A.busy=false; render();
+}
+async function submitSetup(){
+  var A=st.auth, S=A.setup, email=normEmail(S.email);
+  if(!S.name.trim()||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ A.msg={err:true,text:"Enter a name and a valid email."}; render(); return; }
+  if(S.pw.length<6){ A.msg={err:true,text:"Choose a password with at least 6 characters."}; render(); return; }
+  if(S.pw!==S.pw2){ A.msg={err:true,text:"The two passwords don't match."}; render(); return; }
+  A.busy=true; A.msg=null; render();
+  try{ var h=S.pw; var u=await API.setupSuper(S.code,{name:S.name.trim(),email:email,h:h}); st.setupNeeded=false; staffSignedIn(u,h); await loadAdmin(); render(); return; }
+  catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't create the super admin."}; }
+  A.busy=false; render();
+}
+async function loadAdmin(){
+  if(!(API && API.gas) || !st.staff) return;
+  try{
+    var d=await API.adminData(staffAuthObj());
+    var seats={}; d.rows.forEach(function(r){ [r.s,r.g].forEach(function(sid){ if(sid){ seats[sid]=seats[sid]||{}; seats[sid][normIndex(r.i)]=r; } }); });
+    st.seats=seats; st.sheetUrl=d.url||"";
+  }catch(err){ st.msg={err:true,text:err.message}; }
+}
+async function loadStaff(){ try{ st.staffList=await API.listStaff(staffAuthObj()); }catch(err){ st.staffList=[]; st.msg={err:true,text:err.message}; } render(); }
+async function saveStaffForm(){
+  var F=st.staffForm, email=normEmail(F.email);
+  if(!F.name.trim()||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ st.msg={err:true,text:"Enter a name and a valid email."}; render(); return; }
+  if(F.role==="coord" && !F.college){ st.msg={err:true,text:"Choose the coordinator's college."}; render(); return; }
+  if(!F.edit && F.pw.length<6){ st.msg={err:true,text:"Set a password with at least 6 characters."}; render(); return; }
+  if(F.edit && F.pw && F.pw.length<6){ st.msg={err:true,text:"New passwords need at least 6 characters."}; render(); return; }
+  st.busy=true; render();
+  try{
+    var h=F.pw||"";
+    await API.saveStaff(staffAuthObj(),{name:F.name.trim(),email:email,role:F.role,college:F.college,h:h});
+    st.msg={text:(F.edit?"Saved changes for ":"Added ")+F.name.trim()+" as "+ROLES[F.role]+"."}; st.staffForm=null; st.busy=false; await loadStaff(); return;
+  }catch(err){ st.msg={err:true,text:err.user?err.message:"Couldn't save. Please try again."}; }
+  st.busy=false; render();
+}
+
+var app=document.getElementById("app");
+function render(){
+  if(st.staff && ["admin","users"].indexOf(st.view)<0) st.view="admin";
+  if(!st.staff && ["admin","users"].indexOf(st.view)>=0) st.view="dash";
+  var authOn = !st.booking && !st.staff;
+  document.body.classList.toggle("auth-on", authOn);
+  document.body.classList.toggle("is-staff", !!st.staff);
+  var active=document.activeElement, activeId=active && active.id, selStart=null;
+  try{ if(active && active.selectionStart!=null) selStart=active.selectionStart; }catch(e){}
+  document.getElementById("authSlot").innerHTML = authOn ? authHTML() : "";
+  if(!authOn){
+    renderNav();
+    app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : renderSchedule();
+  } else app.innerHTML="";
+  var hadSheet=!!document.querySelector(".sheet");
+  document.getElementById("sheetSlot").innerHTML = (st.pick && st.booking) ? renderSheet() : "";
+  document.body.style.overflow = st.pick ? "hidden" : "";
+  if(activeId){ var el=document.getElementById(activeId); if(el){ el.focus(); try{ if(selStart!=null) el.setSelectionRange(selStart,selStart); }catch(e){} } }
+  else if(st.pick && !hadSheet){ var first=document.querySelector(".sheet .btn.primary"); if(first) first.focus(); }
+}
+function tick(){
+  document.querySelectorAll("[data-start]").forEach(function(el){ el.textContent=startsIn(+el.dataset.start); });
+  document.querySelectorAll("[data-cd]").forEach(function(el){ el.textContent=cdText(+el.dataset.cd); });
+}
+setInterval(tick,30000);
+function go(view){ st.view=view; st.msg=null; st.confirmDrop=null; render(); window.scrollTo(0,0); if(view==="users") loadStaff(); }
+function toList(){ if(st.view!=="dash"){ st.view="dash"; render(); } var el=document.getElementById("sessions"); if(el) el.scrollIntoView({block:"start"}); }
+
+/* ---------- Events ---------- */
+function openBook(sid){ st.pick=sid; st.sheetMsg=null; render(); }
+function closeBook(){ var sid=st.pick; st.pick=null; st.sheetMsg=null; render(); var btn=document.querySelector('[data-act="book"][data-sid="'+sid+'"]'); if(btn) btn.focus(); }
+document.addEventListener("click",async function(e){
+  var n=e.target.closest("[data-nav]"); if(n){ go(n.dataset.nav); return; }
+  var b=e.target.closest("[data-act]"); if(!b) return;
+  var a=b.dataset.act;
+  if(a==="authTab"){ st.auth.tab=b.dataset.tab; st.auth.msg=null; render(); if(b.dataset.tab==="staff" && st.setupNeeded!==false && API){ try{ st.setupNeeded=await API.staffSetupNeeded(); }catch(err){ st.setupNeeded=false; } render(); } return; }
+  if(a==="closeBg"){ if(e.target===b) closeBook(); return; }
+  if(a==="close") return closeBook();
+  if(a==="confirmBook") return submitBook();
+  if(a==="book") return openBook(b.dataset.sid);
+  if(a==="toList") return toList();
+  if(a==="toMine") return go("mine");
+  if(a==="findCollege"||a==="change"||a==="findGrasag"){ st.msg=null; st.view="dash"; render(); return toList(); }
+  if(a==="signOut"||a==="toAuth"){ if(API&&API.signOut) API.signOut(); var wasStaff=!!st.staff; st.booking=null; st.h=""; remember(null); setCollege(""); st.staff=null; st.sh=""; st.staffList=null; st.staffForm=null; try{ localStorage.removeItem("gw-staff"); }catch(e){} if(API&&API.gas) st.seats={}; st.msg=null; st.pick=null; st.view="dash"; st.auth.tab="in"; render(); window.scrollTo(0,0); return; }
+  if(a==="newStaff"){ st.staffForm={edit:false,name:"",email:"",role:"organiser",college:"",pw:""}; st.msg=null; render(); return; }
+  if(a==="editStaff"){ var u=(st.staffList||[]).filter(function(x){return x.email===b.dataset.email;})[0]; if(u){ st.staffForm={edit:true,name:u.name,email:u.email,role:u.role,college:u.college||"",pw:""}; st.msg=null; render(); window.scrollTo(0,0); } return; }
+  if(a==="cancelStaff"){ st.staffForm=null; render(); return; }
+  if(a==="askDelStaff"){ st.confirmStaff=b.dataset.email; render(); return; }
+  if(a==="delStaff"){ try{ await API.deleteStaff(staffAuthObj(), b.dataset.email); st.msg={text:"Staff member removed."}; }catch(err){ st.msg={err:true,text:err.message}; } st.confirmStaff=null; return loadStaff(); }
+  if(a==="resetPw"){ try{ await API.resetStudent(staffAuthObj(), b.dataset.key); st.resetDone=b.dataset.key; st.msg={text:"A password reset link has been emailed to the student."}; }catch(err){ st.msg={err:true,text:err.message}; } render(); return; }
+  if(a==="askDrop"){ st.confirmDrop=b.dataset.sid; render(); return; }
+  if(a==="noDrop"){ st.confirmDrop=null; render(); return; }
+  if(a==="doDrop") return dropSeat(b.dataset.sid);
+  if(a==="toggle"){ st.adminOpen[b.dataset.sid]=!st.adminOpen[b.dataset.sid]; render(); return; }
+  if(a==="csv") return downloadCSV();
+  if(a==="gasReload"){ await loadAdmin(); render(); return; }
+});
+document.addEventListener("keydown",function(e){ if(e.key==="Escape" && st.pick) closeBook(); });
+document.addEventListener("input",function(e){
+  var t=e.target;
+  if(t.dataset && t.dataset.auth){ var p=t.dataset.auth.split("."); st.auth[p[0]][p[1]]=t.value; return; }
+  if(t.dataset && t.dataset.sf && st.staffForm){ st.staffForm[t.dataset.sf]=t.value; if(t.dataset.sf==="role") render(); return; }
+  if(t.id==="q"){ st.q=t.value; if(st.view!=="dash") st.view="dash"; render(); return; }
+  if(t.id==="gasPass") st.gasPass=t.value;
+  if(t.id==="adminQ"){ st.adminQ=t.value; render(); }
+});
+document.addEventListener("submit",function(e){
+  e.preventDefault();
+  var id=e.target.id;
+  if(id==="inForm") return submitIn();
+  if(id==="upForm") return submitUp();
+  if(id==="staffIn") return submitStaffIn();
+  if(id==="forgotForm") return submitForgot();
+  if(id==="newpwForm") return submitNewPw();
+  if(id==="setupForm") return submitSetup();
+  if(id==="staffForm") return saveStaffForm();
+});
+
+function payloadFor(b,sid,gsid){
+  return {key:normIndex(b.i),index:b.i,name:b.n,email:normEmail(b.e),phone:b.ph||"",college:b.c,programme:b.p,level:b.l,h:st.h,
+    sid:sid||"",gsid:gsid||"",sidLabel:sid?longLabel(BY_ID[sid]):"",gsidLabel:gsid?longLabel(BY_ID[gsid]):""};
+}
+async function submitBook(){
+  if(st.busy) return;
+  var b=st.booking, s=BY_ID[st.pick];
+  if(s.g && !isPG(b.l)){ st.sheetMsg={err:true,text:"GRASAG sessions are for postgraduate students only."}; render(); return; }
+  if(!s.g && collegesFor(s.track).every(function(c){return c.id!==b.c;})){ st.sheetMsg={err:true,text:"This session is for "+TRACKS[s.track].label+" students."}; render(); return; }
+  var sid = s.g ? (b.s||"") : s.id, gsid = s.g ? s.id : (b.g||"");
+  if(sid && gsid){ var x=BY_ID[sid], g=BY_ID[gsid]; if(x.day===g.day && x.slot===g.slot){ st.sheetMsg={err:true,text:"This clashes with your "+(s.g?"college session":"GRASAG session")+" ("+longLabel(s.g?x:g)+"). Pick a different time."}; render(); return; } }
+  st.busy=true; st.sheetMsg=null; render();
+  try{
+    var res=await API.register(payloadFor(b,sid,gsid));
+    st.booking=res; st.pick=null; st.view="mine"; st.msg={text:"You're booked for "+longLabel(s)+"."};
+    st.busy=false; render(); window.scrollTo(0,0); return;
+  }catch(err){ st.sheetMsg={err:true,text:err.user?err.message:"Couldn't save your booking. Check your connection and try again."}; if(API&&API.refresh) API.refresh(); }
+  st.busy=false; render();
+}
+async function dropSeat(sid){
+  var b=st.booking, s=BY_ID[sid];
+  st.busy=true; render();
+  try{
+    var res=await API.register(payloadFor(b, s.g?b.s:"", s.g?"":b.g));
+    st.booking=res; st.msg={text:"Your seat in "+longLabel(s)+" was released."};
+  }catch(err){ st.msg={err:true,text:err.user?err.message:"Couldn't change your booking right now. Please try again."}; }
+  st.busy=false; st.confirmDrop=null; render();
+}
+async function downloadCSV(){
+  var lines=[["Date","Time","Track","Session","Session ID","Name","Student number","Email","Phone","College","Programme","Level","Registered at"]];
+  allRows().forEach(function(x){ var s=BY_ID[x.sid]; lines.push([DAYS[s.day].date,s.time,TRACKS[s.track].name+" ("+TRACKS[s.track].code+")",s.title,s.id,x.r.n,x.r.i,x.r.e,x.r.ph||"",x.r.c,x.r.p,x.r.l,x.r.t?new Date(x.r.t).toISOString():""]); });
+  var csv=lines.map(function(l){ return l.map(function(v){ v=String(v==null?"":v); if(/^[=+\-@\t\r]/.test(v)) v="'"+v; return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(","); }).join("\n");
+  try{ await API.download("gemini-workshop-registrations.csv", csv); }
+  catch(err){ if(err && err.code!=="declined"){ st.msg={err:true,text:"The download couldn't start here."}; render(); } }
+}
+
+/* ---------- Boot ---------- */
+async function restore(){
+  if(st.auth.tab==="newpw") return;
+  try{
+    if(st.portal==="staff"){ var u=await API.restoreStaff(); if(u){ staffSignedIn(u,""); await loadAdmin(); render(); } return; }
+    var r=await API.restoreStudent(); if(r){ signedIn(r,""); render(); }
+  }catch(e){}
+}
+function detectPortal(){ return /^\/staff\/?$/i.test(location.pathname) || /^#staff$/i.test(location.hash||"") ? "staff" : "student"; }
+window.addEventListener("hashchange",function(){ if(!/type=recovery/.test(location.hash||"") && detectPortal()!==st.portal) location.reload(); });
+async function boot(){
+  st.portal = detectPortal();
+  st.setupNeeded = false;
+  if(/type=recovery/.test(location.hash||"")){ st.portal="student"; st.auth.tab="newpw"; }
+  render();
+  var cfg=null; try{ cfg=await (await fetch("/api/config",{cache:"no-store"})).json(); }catch(e){}
+  if(!cfg || !cfg.url || !cfg.anonKey || !window.supabase){ st.mode="unconfigured"; render(); return; }
+  var sb=window.supabase.createClient(cfg.url, cfg.anonKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
+  sb.auth.onAuthStateChange(function(ev){ if(ev==="PASSWORD_RECOVERY"){ st.portal="student"; st.booking=null; st.staff=null; st.auth.tab="newpw"; st.auth.msg=null; render(); } });
+  API=supaAPI(sb); st.mode="live"; API.subscribe(); render(); restore();
+}
+boot();
+})();
+</script>
+
+</body>
+</html>
