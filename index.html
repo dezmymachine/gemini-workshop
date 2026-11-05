@@ -3,8 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-</head>
-<body>
 <title>Gemini Workshop Registration</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -215,7 +213,46 @@ body.is-staff .topsearch{display:none}
 .confirm-dl dt{color:var(--muted);font-size:14px}
 .confirm-dl dd{margin:0;font-weight:700;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:no-preference){.meter i{transition:width .4s ease}.hcard{transition:border-color .15s}.hcard:hover{border-color:var(--muted)}}
+
+/* responsive hardening */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow-x:hidden}
+img,svg,video{max-width:100%}
+.shell{min-height:100dvh}
+.auth{min-height:100dvh}
+.field input,.field select,.search input{font-size:16px} /* stops iOS zooming into inputs */
+.hbody,.htop>*,.metarow,.summary,.sheet-box,.auth-card{min-width:0;overflow-wrap:anywhere}
+.btns .btn{flex:0 1 auto}
+@media (max-width:600px){
+  .btns{width:100%}
+  .btns .btn{flex:1 1 auto;justify-content:center}
+  .htop{flex-wrap:wrap}
+  .hbody{padding:16px}
+  .panel{padding:16px}
+  .sheet-box{padding:18px;border-radius:14px}
+  .confirm-dl{grid-template-columns:minmax(0,1fr);gap:2px}
+  .confirm-dl dd{margin-bottom:8px}
+  h2{font-size:22px}
+  .bigstat b{font-size:48px}
+  .stat{padding:16px}
+}
+@media (max-width:360px){
+  .welcome{padding:22px 16px}
+  .auth-card{padding:16px}
+  .chip{padding:8px 12px}
+}
+
+/* password show/hide eye */
+.pwbox{position:relative;display:block}
+.pwbox input{padding-right:52px}
+.pwtoggle{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:44px;height:44px;border:0;background:none;border-radius:8px;cursor:pointer;display:grid;place-items:center;color:var(--muted)}
+.pwtoggle:hover{color:var(--ink);background:var(--sunk)}
+.pwtoggle .eye-off{display:none}
+.pwtoggle[aria-pressed="true"] .eye{display:none}
+.pwtoggle[aria-pressed="true"] .eye-off{display:block}
 </style>
+</head>
+<body>
 
 <aside class="side" aria-label="Main">
   <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Gemini Workshop</b><small>17–19 November 2026</small></span></div>
@@ -476,8 +513,15 @@ function modeNotice(){
   return "";
 }
 function msgHTML(m){ m=m||st.msg; return m ? '<div class="notice '+(m.err?'err':'ok')+'" role="'+(m.err?'alert':'status')+'">'+esc(m.text)+'</div>' : ""; }
+/* Wraps a password <input> with a show/hide eye button (other input types pass through untouched). */
+function pwBox(type,inputHtml){
+  if(type!=="password") return inputHtml;
+  return '<span class="pwbox">'+inputHtml+'<button type="button" class="pwtoggle" data-pwtoggle aria-pressed="false" aria-label="Show password" title="Show password">'+
+    '<svg class="eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>'+
+    '<svg class="eye-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 20C5 20 1 12 1 12a18.5 18.5 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg></button></span>';
+}
 function field(id,label,type,val,attrs,hint){
-  return '<div class="field"><label for="'+id+'">'+label+'</label><input id="'+id+'" name="'+id+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>'+(hint?'<span class="hint">'+esc(hint)+'</span>':'')+'</div>';
+  return '<div class="field"><label for="'+id+'">'+label+'</label>'+pwBox(type,'<input id="'+id+'" name="'+id+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>')+(hint?'<span class="hint">'+esc(hint)+'</span>':'')+'</div>';
 }
 function startsIn(ms){
   var d=ms-Date.now();
@@ -690,7 +734,7 @@ function renderUsers(){
     }).join("")+'</tbody></table></div>';
   return h;
 }
-function sfield(k,label,type,val,attrs){ return '<div class="field"><label for="sf.'+k+'">'+label+'</label><input id="sf.'+k+'" data-sf="'+k+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'></div>'; }
+function sfield(k,label,type,val,attrs){ return '<div class="field"><label for="sf.'+k+'">'+label+'</label>'+pwBox(type,'<input id="sf.'+k+'" data-sf="'+k+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>')+'</div>'; }
 
 /* ---------- Sign-in / create account ---------- */
 function authHTML(){
@@ -765,7 +809,7 @@ function authHTML(){
   return h+'</div></section></div>';
 }
 function afield(id,label,type,val,attrs,hint){
-  return '<div class="field"><label for="'+id+'">'+label+'</label><input id="'+id+'" data-auth="'+id+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>'+(hint?'<span class="hint">'+esc(hint)+'</span>':'')+'</div>';
+  return '<div class="field"><label for="'+id+'">'+label+'</label>'+pwBox(type,'<input id="'+id+'" data-auth="'+id+'" type="'+type+'" value="'+esc(val)+'" '+(attrs||"")+'>')+(hint?'<span class="hint">'+esc(hint)+'</span>':'')+'</div>';
 }
 function signedIn(r,h){ st.booking=r; st.h=h; remember(r,h); fromBooking(r); st.auth.busy=false; st.auth.msg=null; st.auth.in={index:"",pw:""}; st.auth.up=BLANKUP(); }
 async function submitIn(){
@@ -897,6 +941,14 @@ function toList(){ if(st.view!=="dash"){ st.view="dash"; render(); } var el=docu
 function openBook(sid){ st.pick=sid; st.sheetMsg=null; render(); }
 function closeBook(){ var sid=st.pick; st.pick=null; st.sheetMsg=null; render(); var btn=document.querySelector('[data-act="book"][data-sid="'+sid+'"]'); if(btn) btn.focus(); }
 document.addEventListener("click",async function(e){
+  var pw=e.target.closest("[data-pwtoggle]");
+  if(pw){
+    var inp=pw.parentNode.querySelector("input"); if(!inp) return;
+    var show=inp.type==="password"; inp.type=show?"text":"password";
+    pw.setAttribute("aria-pressed",show?"true":"false");
+    pw.setAttribute("aria-label",show?"Hide password":"Show password"); pw.title=show?"Hide password":"Show password";
+    inp.focus(); return;
+  }
   var n=e.target.closest("[data-nav]"); if(n){ go(n.dataset.nav); return; }
   var b=e.target.closest("[data-act]"); if(!b) return;
   var a=b.dataset.act;
