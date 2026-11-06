@@ -155,7 +155,7 @@ What the code already does to stay fast:
 
 3. Run these two files once, in order, in the Supabase SQL Editor:
    `supabase/migrations/002_session_links_and_emails.sql`, then `supabase/migrations/003_email_queue.sql`,
-   then `supabase/migrations/004_realtime.sql` (makes the staff tables update by themselves when someone books)
+   then `supabase/migrations/004_realtime.sql` and `supabase/migrations/005_realtime_students.sql` (make the staff tables update by themselves when someone books or registers)
    (a brand-new project gets these tables from `schema.sql` instead).
 
 Until `RESEND_API_KEY` and `MAIL_FROM` are set, booking still works but no emails are sent.
