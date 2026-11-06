@@ -161,7 +161,9 @@ What the code already does to stay fast:
 Until `RESEND_API_KEY` and `MAIL_FROM` are set, booking still works but no emails are sent.
 Without a verified domain Resend only delivers to your own account email, which is fine for testing.
 - **See raw data:** Supabase → Table Editor → `students`, `bookings`, `staff`.
-- **Change session times or capacity:** the website's session list is defined in `index.html`
-  and in the `sessions` table. Both need to match, so change them together.
+- **Change session times, titles or capacity:** edit the `sessions` table in Supabase (Table Editor -> `sessions`:
+  `starts_at`, `ends_at`, `title`, `capacity`). The website reads the list from the database when it opens, so there is
+  nothing to change in `index.html`. Times are stored in GMT, which is Ghana time. Keep `day_key` as `d1`, `d2`, `d3`
+  (one per day) and `slot` as the order of the session within the day.
 - **Before launch, start fresh:** re-running `schema.sql` wipes all registrations and
   recreates everything. Do not re-run it once students have registered.

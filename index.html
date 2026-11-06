@@ -289,7 +289,7 @@ img,svg,video{max-width:100%}
 <body>
 
 <aside class="side" aria-label="Main">
-  <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Gemini Workshop</b><small>17–19 November 2026</small></span></div>
+  <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Gemini Workshop</b><small id="evtDates"></small></span></div>
   <nav class="navlist" id="sideNav"></nav>
   <div id="whoami"></div>
 </aside>
@@ -309,14 +309,9 @@ img,svg,video{max-width:100%}
 "use strict";
 /* ---------- Programme data ---------- */
 var CAP = 400;
-var DAYS = {
-  d1:{label:"Tue 17 Nov", date:"Tuesday 17 November 2026", short:"Tue 17 Nov", dom:17},
-  d2:{label:"Wed 18 Nov", date:"Wednesday 18 November 2026", short:"Wed 18 Nov", dom:18},
-  d3:{label:"Thu 19 Nov", date:"Thursday 19 November 2026", short:"Thu 19 Nov", dom:19}
-};
-var DAY_ORDER=["d1","d2","d3"];
-var SLOTS = {1:"10:00 – 11:30 AM", 2:"12:30 – 2:00 PM", 3:"3:00 – 4:30 PM", 4:"5:30 – 7:00 PM", 5:"7:30 – 9:00 PM"};
-var SLOT_START = {1:[10,0], 2:[12,30], 3:[15,0], 4:[17,30], 5:[19,30]}; /* Ghana time = GMT */
+/* Days, times and capacity come from the database (the sessions table): see loadSessions() below.
+   Only the display names, colours and college lists live in this file. */
+var DAYS = {}, DAY_ORDER = [], SLOT_LABEL = {};
 var TRACKS = {
   "d1-coe":  {day:"d1", name:"Track 1", code:"CoE",   label:"College of Engineering", hue:"#EA4335"},
   "d1-cos":  {day:"d1", name:"Track 2", code:"CoS",   label:"College of Science", hue:"#4285F4"},
@@ -338,14 +333,37 @@ var COLLEGES = [
   {id:"IDL",   name:"Distance Learning (IDL)", track:"d3-canr"}
 ];
 var LEVELS = ["Level 100","Level 200","Level 300","Level 400","Level 500","Level 600","Postgraduate (Masters)","Postgraduate (PhD)"];
-var SIZES = {"d1-coe":4,"d1-cos":4,"d2-cohss":5,"d2-cabe":4,"d3-cohs":4,"d3-canr":4,"d1-grasag":1,"d2-grasag":1,"d3-grasag":1};
-var SESSIONS = [];
-Object.keys(SIZES).forEach(function(t){ for(var n=1;n<=SIZES[t];n++){ var tr=TRACKS[t];
-  SESSIONS.push({id:t+"-"+n, track:t, slot:n, day:tr.day, g:!!tr.g, time:SLOTS[n], title: tr.g ? "GRASAG Session" : "Session "+n}); } });
-SESSIONS.sort(function(a,b){ return a.day<b.day?-1:a.day>b.day?1:(a.slot-b.slot)||(a.g-b.g)||(a.track<b.track?-1:1); });
-var BY_ID={}; SESSIONS.forEach(function(s){ BY_ID[s.id]=s; });
-var FIRST_START = Date.UTC(2026,10,17,10,0);
-function startOf(s){ var d=DAYS[s.day].dom, t=SLOT_START[s.slot]; return Date.UTC(2026,10,d,t[0],t[1]); }
+var SESSIONS = [], BY_ID = {}, FIRST_START = 0;
+var WD=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"], MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function dayInfo(ms){ var d=new Date(ms), w=WD[d.getUTCDay()], m=MON[d.getUTCMonth()];   /* Ghana time = GMT = UTC */
+  var short=w.slice(0,3)+" "+d.getUTCDate()+" "+m.slice(0,3);
+  return {label:short, short:short, date:w+" "+d.getUTCDate()+" "+m+" "+d.getUTCFullYear(), dom:d.getUTCDate(), month:m, year:d.getUTCFullYear()}; }
+function clock(ms){ var d=new Date(ms), h=d.getUTCHours(); return {h:((h+11)%12)+1, m:("0"+d.getUTCMinutes()).slice(-2), ap:h<12?"AM":"PM"}; }
+function timeRange(a,b){ var x=clock(a), y=clock(b); return x.h+":"+x.m+(x.ap===y.ap?"":" "+x.ap)+" – "+y.h+":"+y.m+" "+y.ap; }
+function startOf(s){ return s.start; }
+/* Loads every session (times, capacity, title) from the database, so they are changed in one place only. */
+async function loadSessions(sb){
+  var r=await sb.from("sessions").select("id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at").order("starts_at",{ascending:true});
+  if(r.error) throw r.error;
+  if(!r.data || !r.data.length) throw new Error("The session list is empty.");
+  var list=r.data.map(function(x){
+    var a=Date.parse(x.starts_at), b=Date.parse(x.ends_at);
+    if(!TRACKS[x.track]) TRACKS[x.track]={name:x.track,code:x.track,label:x.track,hue:"#4285F4"};   /* a track added in the database still shows up */
+    TRACKS[x.track].day=x.day_key; if(x.grasag) TRACKS[x.track].g=true;
+    return {id:x.id, track:x.track, slot:x.slot, day:x.day_key, g:!!x.grasag, time:timeRange(a,b), title:x.title, start:a, end:b, cap:x.capacity};
+  });
+  list.sort(function(a,b){ return a.start-b.start || (a.g-b.g) || (a.track<b.track?-1:1); });
+  SESSIONS=list; BY_ID={}; DAYS={}; DAY_ORDER=[]; SLOT_LABEL={};
+  list.forEach(function(s){
+    BY_ID[s.id]=s;
+    if(!DAYS[s.day]){ DAYS[s.day]=dayInfo(s.start); DAY_ORDER.push(s.day); }
+    if(!SLOT_LABEL[s.slot]) SLOT_LABEL[s.slot]=s.time;
+  });
+  FIRST_START=list[0].start;
+  var f=DAYS[DAY_ORDER[0]], l=DAYS[DAY_ORDER[DAY_ORDER.length-1]], el=document.getElementById("evtDates");
+  if(el) el.textContent = f===l ? f.date.replace(/^\w+ /,"")
+    : f.month===l.month ? f.dom+"–"+l.dom+" "+l.month+" "+l.year : f.dom+" "+f.month.slice(0,3)+" – "+l.dom+" "+l.month.slice(0,3)+" "+l.year;
+}
 function isPG(level){ return /^Postgraduate/.test(level||""); }
 function collegesFor(track){ return COLLEGES.filter(function(c){ return c.track===track; }); }
 function collegeName(id){ return (COLLEGES.filter(function(c){return c.id===id;})[0]||{}).name||id||""; }
@@ -369,7 +387,7 @@ function normEmail(v){ return String(v||"").trim().toLowerCase(); }
 function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
 function userErr(m){ var e=new Error(m); e.user=true; return e; }
 function count(sid){ return st.counts[sid]||0; }
-function cap(sid){ return (st.caps && st.caps[sid]) || CAP; }
+function cap(sid){ return (st.caps && st.caps[sid]) || (BY_ID[sid] && BY_ID[sid].cap) || CAP; }
 function left(sid){ return Math.max(0, cap(sid)-count(sid)); }
 function recountFromSeats(){ var c={}; Object.keys(st.seats).forEach(function(sid){ var seats=st.seats[sid]||{}; c[sid]=Object.keys(seats).filter(function(k){return !!seats[k];}).length; }); st.counts=c; }
 function shardOf(key){ var h=0; for(var i=0;i<key.length;i++){ h=(h*31+key.charCodeAt(i))>>>0; } return "s"+(h%64); }
@@ -554,6 +572,7 @@ function hcardHTML(s){
     '<div class="hfoot">'+meterHTML(s.id)+(bs.ok?'<button class="btn sm" data-act="toMine">View booking</button>':'<button class="btn primary" data-act="book" data-sid="'+s.id+'"'+(bs.dis?' disabled':'')+'>'+esc(bs.label)+'</button>')+'</div></div></article>';
 }
 function modeNotice(){
+  if(st.loadErr) return '<div class="notice err">'+esc(st.loadErr)+'</div>';
   if(st.mode==="unconfigured") return '<div class="notice err">This site isn\'t connected to its database yet. Add SUPABASE_URL and SUPABASE_ANON_KEY in Vercel (Settings › Environment Variables), then redeploy.</div>';
   if(st.mode==="connecting") return '<div class="notice">Connecting to live seat counts…</div>';
   if(API && API.preview) return '<div class="notice">Preview mode: this copy isn\'t connected to the registration database, so nothing you enter here is saved.</div>';
@@ -689,11 +708,11 @@ function renderSchedule(){
   DAY_ORDER.forEach(function(d){
     var tracks=Object.keys(TRACKS).filter(function(k){return TRACKS[k].day===d && vt[k];});
     if(!tracks.length) return;
-    var slots=[1,2,3,4,5].filter(function(n){ return tracks.some(function(k){return BY_ID[k+"-"+n];}); });
+    var slots=Object.keys(SLOT_LABEL).map(Number).sort(function(a,b){return a-b;}).filter(function(n){ return tracks.some(function(k){return BY_ID[k+"-"+n];}); });
     h+='<section style="display:grid;gap:10px;grid-template-columns:minmax(0,1fr)"><h3>'+esc(DAYS[d].date)+'</h3><div class="sched panel" style="padding:0"><table><thead><tr><th>Time</th>'+
       tracks.map(function(k){return '<th>'+esc(TRACKS[k].name)+' · '+esc(TRACKS[k].code)+'</th>';}).join("")+'</tr></thead><tbody>';
     slots.forEach(function(n){
-      h+='<tr><td class="mono" style="white-space:nowrap">'+esc(SLOTS[n])+'</td>';
+      h+='<tr><td class="mono" style="white-space:nowrap">'+esc(SLOT_LABEL[n])+'</td>';
       tracks.forEach(function(k){ var s=BY_ID[k+"-"+n];
         h+= s ? '<td><div class="cell"><span class="t">'+esc(s.title)+(mine(s.id)?' <span class="pill">Booked</span>':'')+'</span>'+meterHTML(s.id)+'</div></td>' : '<td class="muted">—</td>'; });
       h+='</tr>';
@@ -1327,7 +1346,9 @@ async function boot(){
   if(!cfg || !cfg.url || !cfg.anonKey || !window.supabase){ st.mode="unconfigured"; st.ready=true; render(); return; }
   var sb=window.supabase.createClient(cfg.url, cfg.anonKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
   sb.auth.onAuthStateChange(function(ev){ if(ev==="PASSWORD_RECOVERY"){ st.portal="student"; st.booking=null; st.staff=null; st.auth.tab="newpw"; st.auth.msg=null; render(); } });
-  API=supaAPI(sb); st.mode="live"; API.subscribe();
+  API=supaAPI(sb); st.mode="live";
+  try{ await loadSessions(sb); }catch(e){ st.loadErr="We couldn't load the session list. Please check your connection and refresh the page."; }
+  API.subscribe();
   try{ await sb.auth.getSession(); }catch(e){}      /* lets a password-reset link in the address finish being read */
   await restore(); if(st.staff) st.adminSession=qsSession(); st.ready=true; render();
 }
