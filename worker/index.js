@@ -32,6 +32,7 @@ function run(handler, req) {
 
 export default {
   async fetch(request, env) {
+    for (const k of Object.keys(env)) if (typeof env[k] === 'string') process.env[k] = env[k]; // make sure the handlers see every variable
     const url = new URL(request.url);
     const m = /^\/api\/([a-z]+)\/?$/.exec(url.pathname);
     const handler = m && Object.prototype.hasOwnProperty.call(handlers, m[1]) ? handlers[m[1]] : null;
@@ -44,6 +45,7 @@ export default {
 
   // Daily at 08:00 UTC (= Ghana time), see [triggers] in wrangler.toml.
   async scheduled(event, env, ctx) {
+    for (const k of Object.keys(env)) if (typeof env[k] === 'string') process.env[k] = env[k];
     ctx.waitUntil(run(remind, { method: 'GET', headers: { authorization: 'Bearer ' + (process.env.CRON_SECRET || '') }, query: {} }));
   }
 };
