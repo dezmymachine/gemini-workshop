@@ -162,20 +162,21 @@ What the code already does to stay fast:
 Until `MNOTIFY_API_KEY` is set, booking still works but no texts are sent. One text is about 1 credit per
 student per 160 characters; the messages are written to fit in one. Phone numbers must be Ghana numbers
 (for example 024 123 4567); registration rejects anything else.
-## Hosting on Cloudflare Pages (instead of Vercel)
+## Hosting on Cloudflare (instead of Vercel)
 
-The same code runs on Cloudflare. The page is static and `functions/api/[[route]].js` runs the files in `api/` unchanged.
+The same code runs on Cloudflare as a Worker with static assets: `worker/index.js` serves the page and runs the files in `api/` unchanged.
+It also runs the daily reminder job, so no second Worker is needed.
 
-1. Push the repo to GitHub. In Cloudflare: **Workers & Pages -> Create -> Pages -> Connect to Git**, pick the repo.
-2. Build settings: **Build command** `npm run build:cloudflare`, **Build output directory** `dist`. Leave the framework as "None".
-3. **Settings -> Variables and Secrets** (add the keys as *Secret*): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+1. Push the repo to GitHub. In Cloudflare: **Workers & Pages -> Create -> Import a repository**, pick the repo.
+2. Leave the **Build command** empty (the build runs from `wrangler.toml`) and keep the **Deploy command** as `npx wrangler deploy`.
+   The Worker name must be `gemini-workshop` (the `name` in `wrangler.toml`); if you named it differently, change `name` in `wrangler.toml` to match.
+3. **Settings -> Variables and Secrets** (add the keys as *Secret*, runtime, not build): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
    `MNOTIFY_API_KEY`, `MNOTIFY_SENDER`, `CRON_SECRET`. Redeploy after adding them.
-4. **Custom domains -> Set up a domain**, choose your Cloudflare domain (DNS is set for you).
+4. **Settings -> Domains & Routes -> Add -> Custom domain**, choose your Cloudflare domain.
 5. Supabase -> Authentication -> URL Configuration: set **Site URL** to your domain and add `https://YOUR-DOMAIN/reset-password` to Redirect URLs.
-6. **Daily reminders:** Pages cannot run scheduled jobs, so deploy the small Worker in `cron/`:
-   edit `SITE_URL` in `cron/wrangler.toml`, then `cd cron && npx wrangler deploy && npx wrangler secret put CRON_SECRET` (same value as step 3).
+6. Daily reminders run by themselves at 08:00 Ghana time (the cron trigger in `wrangler.toml`), using `CRON_SECRET`.
 
-Test locally with `cp .env .dev.vars && npm run build:cloudflare && npx wrangler pages dev dist` (opens on port 8788).
+Test locally with `cp .env .dev.vars && npx wrangler dev` (opens on port 8787).
 `vercel.json` is ignored by Cloudflare, and `wrangler.toml` is ignored by Vercel, so both hosts can stay set up.
 
 - **See raw data:** Supabase → Table Editor → `students`, `bookings`, `staff`.
