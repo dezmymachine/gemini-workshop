@@ -1,0 +1,5 @@
+# Cloudflare Pages settings. Build command: npm run build:cloudflare   Output folder: dist
+name = "gemini-workshop"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]

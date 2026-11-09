@@ -162,6 +162,22 @@ What the code already does to stay fast:
 Until `MNOTIFY_API_KEY` is set, booking still works but no texts are sent. One text is about 1 credit per
 student per 160 characters; the messages are written to fit in one. Phone numbers must be Ghana numbers
 (for example 024 123 4567); registration rejects anything else.
+## Hosting on Cloudflare Pages (instead of Vercel)
+
+The same code runs on Cloudflare. The page is static and `functions/api/[[route]].js` runs the files in `api/` unchanged.
+
+1. Push the repo to GitHub. In Cloudflare: **Workers & Pages -> Create -> Pages -> Connect to Git**, pick the repo.
+2. Build settings: **Build command** `npm run build:cloudflare`, **Build output directory** `dist`. Leave the framework as "None".
+3. **Settings -> Variables and Secrets** (add the keys as *Secret*): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+   `MNOTIFY_API_KEY`, `MNOTIFY_SENDER`, `CRON_SECRET`. Redeploy after adding them.
+4. **Custom domains -> Set up a domain**, choose your Cloudflare domain (DNS is set for you).
+5. Supabase -> Authentication -> URL Configuration: set **Site URL** to your domain and add `https://YOUR-DOMAIN/reset-password` to Redirect URLs.
+6. **Daily reminders:** Pages cannot run scheduled jobs, so deploy the small Worker in `cron/`:
+   edit `SITE_URL` in `cron/wrangler.toml`, then `cd cron && npx wrangler deploy && npx wrangler secret put CRON_SECRET` (same value as step 3).
+
+Test locally with `cp .env .dev.vars && npm run build:cloudflare && npx wrangler pages dev dist` (opens on port 8788).
+`vercel.json` is ignored by Cloudflare, and `wrangler.toml` is ignored by Vercel, so both hosts can stay set up.
+
 - **See raw data:** Supabase → Table Editor → `students`, `bookings`, `staff`.
 - **Change session times, titles or capacity:** edit the `sessions` table in Supabase (Table Editor -> `sessions`:
   `starts_at`, `ends_at`, `title`, `capacity`). The website reads the list from the database when it opens, so there is

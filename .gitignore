@@ -25,3 +25,8 @@ Thumbs.db
 # Local scratch
 .claude/
 .local/
+
+# Cloudflare
+dist/
+.wrangler/
+.dev.vars

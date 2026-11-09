@@ -2,9 +2,14 @@
   "name": "gemini-workshop-registration",
   "private": true,
   "version": "1.0.0",
-  "description": "Gemini & Google Workspace Workshop registration (Vercel + Supabase)",
-  "engines": { "node": ">=18" },
+  "description": "Gemini & Google Workspace Workshop registration (Vercel or Cloudflare Pages + Supabase)",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4"
+  },
+  "scripts": {
+    "build:cloudflare": "node scripts/build-cloudflare.js"
   }
 }
