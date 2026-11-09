@@ -573,7 +573,7 @@ function hcardHTML(s){
 }
 function modeNotice(){
   if(st.loadErr) return '<div class="notice err">'+esc(st.loadErr)+'</div>';
-  if(st.mode==="unconfigured") return '<div class="notice err">This site isn\'t connected to its database yet. Add SUPABASE_URL and SUPABASE_ANON_KEY to the hosting settings (Vercel: Settings › Environment Variables; Cloudflare: Settings › Variables and Secrets), then redeploy.</div>';
+  if(st.mode==="unconfigured") return '<div class="notice err">This site isn\'t connected to its database yet. Add SUPABASE_URL and SUPABASE_ANON_KEY in Vercel (Settings › Environment Variables), then redeploy.</div>';
   if(st.mode==="connecting") return '<div class="notice">Connecting to live seat counts…</div>';
   if(API && API.preview) return '<div class="notice">Preview mode: this copy isn\'t connected to the registration database, so nothing you enter here is saved.</div>';
   return "";

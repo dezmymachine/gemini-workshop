@@ -26,7 +26,3 @@ Thumbs.db
 .claude/
 .local/
 
-# Cloudflare
-dist/
-.wrangler/
-.dev.vars
