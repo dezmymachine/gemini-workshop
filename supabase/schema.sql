@@ -89,7 +89,8 @@ create table public.students (
   college        text not null references public.colleges(id),
   programme      text not null check (length(trim(programme)) > 0),
   level          text not null check (level in ('Level 100','Level 200','Level 300','Level 400','Level 500','Level 600','Postgraduate (Masters)','Postgraduate (PhD)')),
-  created_at     timestamptz not null default now()
+  created_at     timestamptz not null default now(),
+  welcome_sent_at timestamptz                   -- set once the welcome SMS has been sent
 );
 
 create table public.staff (
@@ -314,7 +315,8 @@ create table public.email_queue (
   id           bigserial primary key,
   broadcast_id bigint not null references public.session_broadcasts(id) on delete cascade,
   student_id   uuid references public.students(user_id) on delete cascade,
-  to_email     text not null,
+  to_email     text,                             -- old email column, no longer used
+  to_phone     text,
   name         text not null,
   status       text not null default 'pending' check (status in ('pending', 'sending', 'sent', 'failed')),
   attempts     int  not null default 0,

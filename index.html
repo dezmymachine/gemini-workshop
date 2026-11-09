@@ -525,7 +525,7 @@ function supaAPI(sb){
     broadcastStart: function(sid){ return staffApi({action:"start",session_id:sid},"/api/broadcast"); },
     broadcastProcess: function(id){ return staffApi({action:"process",id:id},"/api/broadcast"); },
     broadcastRetry: function(id){ return staffApi({action:"retry",id:id},"/api/broadcast"); },
-    notify: async function(){ try{ await staffApi({},"/api/notify"); }catch(e){} },     /* emails the booking confirmation; never blocks booking */
+    notify: async function(kind){ try{ await staffApi({kind:kind||"confirm"},"/api/notify"); }catch(e){} },     /* texts the welcome / booking confirmation; never blocks the page */
     listStaff: async function(){ var j=await staffApi({action:"list"}); return (j.staff||[]).map(function(u){ return {user_id:u.user_id,email:u.email,name:u.name,role:u.role,college:u.college||""}; }); },
     saveStaff: async function(a,u){ var ex=(st.staffList||[]).filter(function(x){return normEmail(x.email)===normEmail(u.email);})[0]; await staffApi({action:"save",user:{user_id:ex&&ex.user_id||null,name:u.name,email:u.email,role:u.role,college:u.college,password:u.h||""}}); },
     deleteStaff: async function(a,email){ var ex=(st.staffList||[]).filter(function(x){return normEmail(x.email)===normEmail(email);})[0]; if(!ex) throw userErr("Staff member not found."); await staffApi({action:"delete",user_id:ex.user_id}); },
@@ -692,7 +692,7 @@ function renderMine(){
       '<div class="span2 btns"><button class="btn primary" type="submit"'+(st.busy?' disabled':'')+'>'+(st.busy?'Searching…':'Find my booking')+'</button><span class="muted">Not registered yet? <button type="button" class="linkbtn" data-act="toList">Browse sessions</button></span></div></form>';
   }
   var ini=String(b.n||"?").trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
-  h+='<div class="sec-head"><div><h2>My Sessions</h2><p>Your joining link appears on each session once the organisers add it. We also email it to you.</p></div></div>';
+  h+='<div class="sec-head"><div><h2>My Sessions</h2><p>Your joining link appears on each session once the organisers add it. We also text it to you.</p></div></div>';
   h+='<div class="dash"><aside class="profile panel"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div><h3>'+esc(b.n)+'</h3><span class="muted">'+esc(b.l)+'</span></div>'+
     '<dl><div><dt>Student number</dt><dd class="mono">'+esc(b.i)+'</dd></div><div><dt>Email</dt><dd>'+esc(b.e)+'</dd></div><div><dt>Phone</dt><dd class="mono">'+esc(b.ph||'—')+'</dd></div><div><dt>College</dt><dd>'+esc(collegeName(b.c))+'</dd></div><div><dt>Programme</dt><dd>'+esc(b.p)+'</dd></div></dl>'+
     '<button class="linkbtn" data-act="signOut" style="justify-self:start">Not you? Sign out</button></aside><section class="list" style="min-width:0">';
@@ -838,8 +838,8 @@ function linkPanel(sid,rows){
     '<div class="btns"><button class="btn primary" type="submit"'+(anyBusy?' disabled':'')+'>'+(st.busy&&!ask?'Saving…':'Save link')+'</button>';
   if(sending) h+='';
   else if(interrupted) h+='<button type="button" class="btn primary" data-act="resumeBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Resume sending</button>';
-  else if(ask) h+='<span style="font-weight:700">Email the link to '+n+' student'+(n===1?'':'s')+'?</span><button type="button" class="btn primary sm" data-act="doBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Yes, send now</button><button type="button" class="btn sm" data-act="noBroadcast">Cancel</button>';
-  else h+='<button type="button" class="btn" data-act="askBroadcast" data-sid="'+esc(sid)+'"'+((!cur||!n||draft.trim()!==cur||anyBusy)?' disabled':'')+'>Email link to booked students</button>';
+  else if(ask) h+='<span style="font-weight:700">Text the link to '+n+' student'+(n===1?'':'s')+'?</span><button type="button" class="btn primary sm" data-act="doBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Yes, send now</button><button type="button" class="btn sm" data-act="noBroadcast">Cancel</button>';
+  else h+='<button type="button" class="btn" data-act="askBroadcast" data-sid="'+esc(sid)+'"'+((!cur||!n||draft.trim()!==cur||anyBusy)?' disabled':'')+'>Text link to booked students</button>';
   if(failedN && !sending && !ask) h+='<button type="button" class="btn" data-act="retryBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Retry '+last.failed+' failed</button>';
   h+='</div>';
   if(last && (sending || interrupted)){
@@ -847,7 +847,7 @@ function linkPanel(sid,rows){
     h+='<div><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="'+last.total+'" aria-valuenow="'+done+'"><i style="width:'+pct+'%"></i></div>'+
       '<span style="font-size:14px">'+(sending?'Sending in batches of 100. Sent '+last.sent+' of '+last.total+(last.failed?' ('+last.failed+' failed)':'')+'. Keep this page open.':'Sending was interrupted: '+last.sent+' of '+last.total+' sent. Resume to send the rest.')+'</span></div>';
   } else {
-    if(last) h+='<span class="muted" style="font-size:14px">Last emailed '+esc(new Date(last.at).toLocaleString("en-GB",{timeZone:"UTC",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))+' (Ghana time): '+last.sent+' of '+last.total+' sent'+(last.failed?', '+last.failed+' failed':'')+'.</span>';
+    if(last) h+='<span class="muted" style="font-size:14px">Last texted '+esc(new Date(last.at).toLocaleString("en-GB",{timeZone:"UTC",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))+' (Ghana time): '+last.sent+' of '+last.total+' sent'+(last.failed?', '+last.failed+' failed':'')+'.</span>';
   }
   return h+'</form>';
 }
@@ -862,7 +862,7 @@ async function runBroadcast(sid,b){
       b=await API.broadcastProcess(b.id); keep(b); render();
       var d=b.sent+b.failed; stall = d===prev ? stall+1 : 0; prev=d; if(stall>=5) break;
     }
-    if(b.status==="done") st.msg={err:b.sent===0,text:"Finished: "+b.sent+" of "+b.total+" student"+(b.total===1?"":"s")+" emailed."+(b.failed?" "+b.failed+" could not be sent. Use Retry to try them again.":"")};
+    if(b.status==="done") st.msg={err:b.sent===0,text:"Finished: "+b.sent+" of "+b.total+" student"+(b.total===1?"":"s")+" texted."+(b.failed?" "+b.failed+" could not be sent. Use Retry to try them again.":"")};
     else st.msg={err:true,text:"Sending paused at "+b.sent+" of "+b.total+". Press Resume sending to continue."};
   }catch(err){ st.msg={err:true,text:err.message+" Press Resume sending to continue."}; }
   st.bcRun=null; render(); window.scrollTo(0,0);
@@ -919,8 +919,8 @@ function rosterTable(rows,withSession,key){
 function renderUsers(){
   var h=msgHTML();
   h+='<div class="sec-head"><div><h2>Staff &amp; roles</h2><p>Create staff accounts and choose what each person can see.</p></div><button class="btn primary sm" data-act="newStaff">Add staff member</button></div>';
-  h+='<div class="stats"><div class="stat"><span class="lb"><b>Super admin</b></span><span class="sub">Sees everything, manages staff accounts and roles, sets session links and emails them to students.</span></div>'+
-    '<div class="stat"><span class="lb"><b>Organiser</b></span><span class="sub">Sees every college\'s registrations, downloads lists, sets session links and emails them to students.</span></div>'+
+  h+='<div class="stats"><div class="stat"><span class="lb"><b>Super admin</b></span><span class="sub">Sees everything, manages staff accounts and roles, sets session links and texts them to students.</span></div>'+
+    '<div class="stat"><span class="lb"><b>Organiser</b></span><span class="sub">Sees every college\'s registrations, downloads lists, sets session links and texts them to students.</span></div>'+
     '<div class="stat"><span class="lb"><b>College coordinator</b></span><span class="sub">Sees only the students from their own college.</span></div></div>';
   var F=st.staffForm;
   if(F){
@@ -1003,7 +1003,7 @@ function authHTML(){
       '<form id="upForm" class="grid" novalidate>'+
       '<div class="grid span2 steppanel"'+(step===1?'':' hidden')+'>'+
         '<div class="span2">'+afield("up.name","Full name","text",up.name,'autocomplete="name" required')+'</div>'+
-        '<div class="span2">'+afield("up.email","Student email","email",up.email,'autocomplete="email" required')+'</div>'+
+        '<div class="span2">'+afield("up.email","Email","email",up.email,'autocomplete="email" placeholder="e.g. name@example.com" required')+'</div>'+
         pwSuggest("up.pw","Password",up.pw)+
         '<div class="span2 btns"><button class="btn primary wide" type="button" data-act="upNext">Continue</button></div>'+
       '</div>'+
@@ -1044,7 +1044,7 @@ async function submitIn(){
   var A=st.auth, key=normIndex(A.in.index);
   if(!key||!A.in.pw){ A.msg={err:true,text:"Enter your student number and password."}; render(); return; }
   A.busy=true; A.msg=null; render();
-  try{ var r=await API.signIn(A.in.index.trim(),A.in.pw); signedIn(r,""); st.view="dash"; st.msg=null; render(); window.scrollTo(0,0); return; }
+  try{ var r=await API.signIn(A.in.index.trim(),A.in.pw); signedIn(r,""); st.view="dash"; st.msg=null; render(); window.scrollTo(0,0); if(API.notify) API.notify("welcome"); return; }
   catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't sign in right now. Check your connection and try again."}; }
   A.busy=false; render();
 }
@@ -1055,9 +1055,10 @@ function checkUpStep1(f){
   if(f.pw.length<6) return "Choose a password with at least 6 characters.";
   return "";
 }
+function normPhone(p){ var d=String(p||"").replace(/[^0-9]/g,""); if(d.indexOf("00233")===0) d=d.slice(5); else if(d.indexOf("233")===0) d=d.slice(3); else if(d.charAt(0)==="0") d=d.slice(1); return /^[2-5][0-9]{8}$/.test(d) ? "0"+d : ""; }
 function checkUpStep2(f){
   var miss=[]; if(!normIndex(f.index)) miss.push("student number");
-  if(f.phone.replace(/[^0-9]/g,"").length<9) miss.push("a valid phone number");
+  if(!normPhone(f.phone)) miss.push("a valid Ghana phone number, like 024 123 4567");
   if(!f.college) miss.push("college"); if(!f.level) miss.push("level"); if(!f.programme.trim()) miss.push("programme");
   return miss.length ? "Please add "+miss.join(", ")+"." : "";
 }
@@ -1073,8 +1074,8 @@ async function submitUp(){
   e=checkUpStep2(f); if(e){ A.msg={err:true,text:e}; render(); return; }
   A.busy=true; A.msg=null; render();
   try{
-    var r=await API.createAccount({key:key,index:f.index.trim(),name:f.name.trim(),email:email,phone:f.phone.trim(),college:f.college,programme:f.programme.trim(),level:f.level,pw:f.pw});
-    signedIn(r,""); st.view="dash"; st.msg={text:"You're registered. Now choose your session below."}; render(); toList(); return;
+    var r=await API.createAccount({key:key,index:f.index.trim(),name:f.name.trim(),email:email,phone:normPhone(f.phone),college:f.college,programme:f.programme.trim(),level:f.level,pw:f.pw});
+    signedIn(r,""); st.view="dash"; st.msg={text:"You're registered. Now choose your session below."}; render(); toList(); if(API.notify) API.notify("welcome"); return;
   }catch(err){
     A.msg={err:!err.info,text:err.user?err.message:"Couldn't complete your registration. Check your connection and try again."};
     if(err.info){ A.tab="in"; A.step=1; A.in.index=f.index; A.up=BLANKUP(); }
