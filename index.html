@@ -50,7 +50,8 @@ button,input,select{font:inherit;color:inherit}
 .nav svg{flex:none}
 .nav .count{margin-left:auto;font-size:12px;font-family:var(--f-mono);background:var(--sunk);color:var(--muted);border-radius:99px;padding:1px 8px}
 .nav[aria-current="page"] .count{background:var(--surface);color:var(--accent)}
-.whoami{margin-top:auto;display:flex;gap:10px;align-items:center;padding:12px;border-radius:10px;background:var(--sunk);min-width:0}
+#whoami{margin-top:auto}
+.whoami{display:flex;gap:10px;align-items:center;padding:12px;border-radius:10px;background:var(--sunk);min-width:0}
 .avatar{width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;flex:none}
 .avatar.lg{width:64px;height:64px;font-size:24px}
 .whoami .nm{font-weight:700;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -302,6 +303,7 @@ img,svg,video{max-width:100%}
   <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Gemini Workshop</b><small id="evtDates"></small></span></div>
   <nav class="navlist" id="sideNav"></nav>
   <div id="whoami"></div>
+  <div class="navlist" id="sideFoot"></div>
 </aside>
 <div class="shell">
   <nav class="mobilebar" id="mobileNav" aria-label="Main"></nav>
@@ -678,7 +680,8 @@ function renderNav(){
   };
   var out='<button class="nav" data-act="signOut">'+ICON.out+'<span>Sign out</span></button>';
   var me='<button class="nav" data-nav="profile"'+(st.view==="profile"?' aria-current="page"':'')+'>'+ICON.me+'<span>Profile</span></button>';
-  document.getElementById("sideNav").innerHTML = html() + '<div class="navgroup">Account</div>' + (st.staff ? out : me + out);
+  document.getElementById("sideNav").innerHTML = html() + (st.staff ? '' : '<div class="navgroup">Account</div>' + me);
+  document.getElementById("sideFoot").innerHTML = out;   /* Sign out sits at the very bottom of the sidebar */
   /* Phones: students get Profile in the bottom bar; Sign out lives on the Profile page. Staff keep Sign out. */
   document.getElementById("mobileNav").innerHTML = html() + (st.staff ? out : me);
   var who = st.staff ? {n:st.staff.name, r:ROLES[st.staff.role]+(st.staff.role==="coord"?" · "+st.staff.college:"")} : st.booking ? {n:st.booking.n, r:isPG(st.booking.l)?'Postgraduate student':'Student'} : null;
