@@ -34,8 +34,15 @@ module.exports = async (req, res) => {
     const dayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
     const tomorrow = { from: new Date(dayStart).toISOString(), to: new Date(dayStart + 86400000).toISOString() };
 
-    const { data: logs } = await admin.from('email_log').select('student_id, session_id, kind').limit(100000);
-    const done = new Set((logs || []).map((l) => l.kind + '|' + l.student_id + '|' + l.session_id));
+    // Read the whole log page by page: the database returns at most 1000 rows per request, so a single
+    // read would silently miss older entries and the same student could be texted twice.
+    const done = new Set();
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await admin.from('email_log').select('student_id, session_id, kind').order('student_id').order('session_id').order('kind').range(from, from + 999);
+      if (error) throw error;
+      (data || []).forEach((l) => done.add(l.kind + '|' + l.student_id + '|' + l.session_id));
+      if (!data || data.length < 1000) break;
+    }
     const { data: links } = await admin.from('session_links').select('session_id, url');
     const link = {}; (links || []).forEach((l) => { link[l.session_id] = l.url; });
 

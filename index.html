@@ -149,7 +149,10 @@ button,input,select{font:inherit;color:inherit}
 .btn.danger{color:var(--full);border-color:var(--full);background:transparent}
 .btn.sm{min-height:40px;padding:8px 14px;font-size:14px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:700;cursor:pointer;text-decoration:underline}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:700;cursor:pointer;text-decoration:none}
+a{text-decoration:none}
+.rowlink{cursor:pointer}
+.rowlink:hover td,.rowlink:hover td .muted,.rowlink:hover td .mono{color:var(--accent)}
 .empty{padding:28px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:var(--r)}
 .notice{border:1px solid var(--line);background:var(--sunk);border-radius:var(--r);padding:12px 14px;font-size:14px}
 .notice.err{background:var(--full-soft);border-color:transparent;color:var(--full)}
@@ -174,6 +177,13 @@ button,input,select{font:inherit;color:inherit}
 .dash{display:grid;grid-template-columns:minmax(0,290px) minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:980px){.dash{grid-template-columns:minmax(0,1fr)}}
 .profile{display:grid;gap:14px}
+.pfpage{display:grid;gap:22px;max-width:720px}
+.pfhead{display:flex;align-items:center;gap:16px}
+.pfhead h3{margin:0}
+.pfgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px;margin:0}
+.pfgrid dt{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.pfgrid dd{margin:2px 0 0;font-weight:700;overflow-wrap:anywhere}
+@media (max-width:600px){.pfgrid{grid-template-columns:minmax(0,1fr)}}
 .profile dl{display:grid;gap:10px;margin:0}
 .profile dt{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
 .profile dd{margin:2px 0 0;font-weight:700;overflow-wrap:anywhere}
@@ -407,6 +417,7 @@ var ICON={
   key:svg('<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/>'),
   cal:svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',16),
   clock:svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',16),
+  me:svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
   user:svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',16),
   live:svg('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',16),
   seat:svg('<path d="M5 11V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v5"/><path d="M3 11h18v5H3zM6 16v4M18 16v4"/>',20),
@@ -620,8 +631,10 @@ function renderNav(){
     }).join("");
   };
   var out='<button class="nav" data-act="signOut">'+ICON.out+'<span>Sign out</span></button>';
-  document.getElementById("sideNav").innerHTML = html() + '<div class="navgroup">Account</div>' + out;
-  document.getElementById("mobileNav").innerHTML = html() + out;
+  var me='<button class="nav" data-nav="profile"'+(st.view==="profile"?' aria-current="page"':'')+'>'+ICON.me+'<span>Profile</span></button>';
+  document.getElementById("sideNav").innerHTML = html() + '<div class="navgroup">Account</div>' + (st.staff ? out : me + out);
+  /* Phones: students get Profile in the bottom bar; Sign out lives on the Profile page. Staff keep Sign out. */
+  document.getElementById("mobileNav").innerHTML = html() + (st.staff ? out : me);
   var who = st.staff ? {n:st.staff.name, r:ROLES[st.staff.role]+(st.staff.role==="coord"?" · "+st.staff.college:"")} : st.booking ? {n:st.booking.n, r:isPG(st.booking.l)?'Postgraduate student':'Student'} : null;
   var w=document.getElementById("whoami");
   if(who){ var ini=String(who.n||"?").trim().split(/\s+/).map(function(x){return x[0];}).slice(0,2).join("").toUpperCase();
@@ -683,6 +696,15 @@ function bookedCard(sid){
   }
   return h+'</div></div></article>';
 }
+function renderProfile(){
+  var b=st.booking, ini=String(b.n||"?").trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
+  var rows=[["Student number",b.i,true],["Email",b.e],["Phone",b.ph||"—",true],["College",collegeName(b.c)],["Level",b.l],["Programme",b.p]];
+  var n=myIds().length;
+  return msgHTML()+'<div class="sec-head"><div><h2>Profile</h2></div></div>'+
+    '<div class="panel pfpage"><div class="pfhead"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div style="min-width:0"><h3>'+esc(b.n)+'</h3><span class="muted">'+(isPG(b.l)?'Postgraduate student':'Student')+' · '+n+' session'+(n===1?'':'s')+' booked</span></div></div>'+
+    '<dl class="pfgrid">'+rows.map(function(r){ return '<div><dt>'+r[0]+'</dt><dd'+(r[2]?' class="mono"':'')+'>'+esc(r[1])+'</dd></div>'; }).join("")+'</dl>'+
+    '<div class="btns"><button class="btn" data-act="signOut">'+ICON.out+'<span style="margin-left:8px">Sign out</span></button></div></div>';
+}
 function renderMine(){
   var h=modeNotice()+msgHTML();
   var b=st.booking;
@@ -695,7 +717,7 @@ function renderMine(){
   h+='<div class="sec-head"><div><h2>My Sessions</h2><p>Your joining link appears on each session once the organisers add it. We also text it to you.</p></div></div>';
   h+='<div class="dash"><aside class="profile panel"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div><h3>'+esc(b.n)+'</h3><span class="muted">'+esc(b.l)+'</span></div>'+
     '<dl><div><dt>Student number</dt><dd class="mono">'+esc(b.i)+'</dd></div><div><dt>Email</dt><dd>'+esc(b.e)+'</dd></div><div><dt>Phone</dt><dd class="mono">'+esc(b.ph||'—')+'</dd></div><div><dt>College</dt><dd>'+esc(collegeName(b.c))+'</dd></div><div><dt>Programme</dt><dd>'+esc(b.p)+'</dd></div></dl>'+
-    '<button class="linkbtn" data-act="signOut" style="justify-self:start">Not you? Sign out</button></aside><section class="list" style="min-width:0">';
+    '</aside><section class="list" style="min-width:0">';
   if(b.s) h+=bookedCard(b.s); else h+='<div class="empty">You don\'t have a college session yet. <button class="linkbtn" data-act="findCollege">Find a session for your college</button></div>';
   if(b.g) h+=bookedCard(b.g);
   else if(isPG(b.l)) h+='<div class="prompt"><div><strong>You can also join a GRASAG session</strong><div class="muted" style="font-size:14px">One dedicated postgraduate session runs on Tuesday, Wednesday and Thursday.</div></div><button class="btn sm" data-act="findGrasag">See GRASAG sessions</button></div>';
@@ -821,7 +843,7 @@ function renderAdmin(){
   h+='<div class="sched panel" style="padding:0"><table class="admin-table"><thead><tr><th>Day</th><th>Track</th><th>Session</th><th class="num">'+(role==="coord"?'Your students':'Booked')+'</th><th class="num">Seats left</th>'+(role==="coord"?'':'<th>Link</th>')+'<th></th></tr></thead><tbody>';
   sp.items.forEach(function(s){
     var l=left(s.id);
-    h+='<tr><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+'</td><td class="num mono">'+(role==="coord"?(by[s.id]||0):count(s.id))+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
+    h+='<tr class="rowlink" data-act="openSession" data-sid="'+s.id+'"><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+'</td><td class="num mono">'+(role==="coord"?(by[s.id]||0):count(s.id))+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
       (role==="coord"?'':'<td>'+(st.links&&st.links[s.id]?'<span class="pill">Link set</span>':'<span class="pill plain">No link</span>')+'</td>')+
       '<td><a class="linkbtn" href="/staff?session='+encodeURIComponent(s.id)+'" data-act="openSession" data-sid="'+s.id+'">View list</a></td></tr>';
   });
@@ -1172,6 +1194,7 @@ var app=document.getElementById("app");
 function render(){
   if(st.staff && ["admin","users"].indexOf(st.view)<0) st.view="admin";
   if(!st.staff && ["admin","users"].indexOf(st.view)>=0) st.view="dash";
+  if(st.view==="profile" && (st.staff || !st.booking)) st.view="dash";
   var authOn = !st.booking && !st.staff;
   document.body.classList.toggle("auth-on", authOn);
   document.body.classList.toggle("is-staff", !!st.staff);
@@ -1181,7 +1204,7 @@ function render(){
   document.getElementById("authSlot").innerHTML = authOn ? (st.ready ? authHTML() : '<div class="auth"><section class="auth-main" style="grid-column:1/-1"><div class="auth-card"><div class="empty">Loading…</div></div></section></div>') : "";
   if(!authOn){
     renderNav();
-    app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : renderSchedule();
+    app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : st.view==="profile" ? renderProfile() : renderSchedule();
   } else app.innerHTML="";
   var hadSheet=!!document.querySelector(".sheet");
   document.getElementById("sheetSlot").innerHTML = (st.pick && st.booking) ? renderSheet() : "";
