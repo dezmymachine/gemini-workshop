@@ -27,7 +27,8 @@ function label(s) { return s.grasag ? 'GRASAG Session' : (TRACK_CODE[s.track] ||
 
 const NOLINK = 'Your joining link will be sent before the session.';
 const templates = {
-  welcome:   (name) => `Hi ${name}, welcome to the Gemini & Google Workspace Workshop. Your account is ready. Sign in to pick your session.`,
+  // At registration no session is chosen yet, so the session, date and time parts wait for the booking text (confirm).
+  welcome:   (name) => `Hi ${name}, you're registered for the Gemini Workshop. Your joining link will be sent before the session.`,
   confirm:   (name, s, link) => `Hi ${name}, you're registered for the Gemini Workshop: ${label(s)}, ${when(s).day}, ${when(s).time} GMT. ` + (link ? `Join link: ${link}` : NOLINK),
   reminder:  (name, s, link) => `Hi ${name}, reminder: your Gemini Workshop session (${label(s)}) is tomorrow, ${when(s).day}, ${when(s).time} GMT. ` + (link ? `Join link: ${link}` : NOLINK),
   // No name in the broadcast, so one message can go to 100 numbers in a single call.
