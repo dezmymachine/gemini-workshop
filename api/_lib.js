@@ -3,6 +3,26 @@ const { createClient } = require('@supabase/supabase-js');
 
 function bad(res, code, msg) { return res.status(code).json({ error: msg }); }
 
+// ---------- Traffic limits ----------
+// A small in-memory counter per server instance (fixed time window). It is best-effort: Vercel may run several
+// instances, each with its own counter, but that is enough to stop one caller from flooding an endpoint or
+// guessing passwords, without adding any database writes during a rush.
+const hits = new Map();
+function limit(key, max, windowMs) {
+  const now = Date.now();
+  let h = hits.get(key);
+  if (!h || now >= h.reset) { h = { n: 0, reset: now + windowMs }; hits.set(key, h); }
+  h.n++;
+  if (hits.size > 50000) for (const [k, v] of hits) { if (now >= v.reset) hits.delete(k); }   // keep memory small
+  return h.n <= max ? 0 : Math.ceil((h.reset - now) / 1000);   // 0 = allowed, otherwise seconds to wait
+}
+function clientIp(req) {
+  const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return xf || String(req.headers['x-real-ip'] || '') || 'unknown';
+}
+const BUSY = 'Lots of students are using the site right now. Please wait a moment and try again.';
+function tooMany(res, wait, msg) { res.setHeader('Retry-After', String(wait)); return bad(res, 429, msg || BUSY); }
+
 function adminClient() {
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
@@ -26,6 +46,8 @@ async function requireUser(req, res) {
   if (!token) { bad(res, 401, 'Please sign in again.'); return null; }
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data || !data.user) { bad(res, 401, 'Please sign in again.'); return null; }
+  const wait = limit('user:' + data.user.id, 120, 60000);   // 120 calls a minute per signed-in person
+  if (wait) { tooMany(res, wait); return null; }
   return { admin, user: data.user };
 }
 
@@ -42,4 +64,4 @@ function validLink(u) {
   try { const x = new URL(u); return x.protocol === 'https:' && !!x.hostname; } catch (e) { return false; }
 }
 
-module.exports = { bad, adminClient, bodyOf, tokenOf, requireUser, requireStaff, validLink };
+module.exports = { bad, adminClient, bodyOf, tokenOf, requireUser, requireStaff, validLink, limit, clientIp, tooMany };

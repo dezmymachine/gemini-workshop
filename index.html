@@ -353,10 +353,16 @@ function timeRange(a,b){ var x=clock(a), y=clock(b); return x.h+":"+x.m+(x.ap===
 function startOf(s){ return s.start; }
 /* Loads every session (times, capacity, title) from the database, so they are changed in one place only. */
 async function loadSessions(sb){
-  var r=await sb.from("sessions").select("id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at").order("starts_at",{ascending:true});
-  if(r.error) throw r.error;
-  if(!r.data || !r.data.length) throw new Error("The session list is empty.");
-  var list=r.data.map(function(x){
+  /* Try the shared, CDN-cached catalog first (also brings the seat counts); fall back to asking Supabase directly. */
+  var rows=null;
+  try{ var cr=await fetchRetry("/api/catalog",{},3); if(cr.ok){ var cj=await cr.json(); if(cj.sessions && cj.sessions.length){ rows=cj.sessions; st.counts=cj.counts||{}; st.caps=cj.capacity||{}; } } }catch(e){}
+  if(!rows){
+    var r=await sb.from("sessions").select("id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at").order("starts_at",{ascending:true});
+    if(r.error) throw r.error;
+    rows=r.data;
+  }
+  if(!rows || !rows.length) throw new Error("The session list is empty.");
+  var list=rows.map(function(x){
     var a=Date.parse(x.starts_at), b=Date.parse(x.ends_at);
     if(!TRACKS[x.track]) TRACKS[x.track]={name:x.track,code:x.track,label:x.track,hue:"#4285F4"};   /* a track added in the database still shows up */
     TRACKS[x.track].day=x.day_key; if(x.grasag) TRACKS[x.track].g=true;
@@ -396,6 +402,23 @@ function normIndex(v){ return String(v||"").toUpperCase().replace(/[^A-Z0-9]/g,"
 function normEmail(v){ return String(v||"").trim().toLowerCase(); }
 function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
 function userErr(m){ var e=new Error(m); e.user=true; return e; }
+/* ---------- Busy-day helpers ----------
+   When lots of students arrive at once, a request can fail for a moment (network blip, 429 "too many", 5xx).
+   Instead of showing an error straight away (and students hammering the button), wait and try again a few
+   times, waiting longer each time plus a random bit so thousands of phones don't retry in step. */
+var BUSY_MSG="Lots of students are using the site right now. Please wait a moment and try again.";
+function retryable(status){ return !status || status===429 || status>=500; }
+async function fetchRetry(url,opts,tries){
+  tries=tries||4;
+  for(var i=0;;i++){
+    var r=null, err=null;
+    try{ r=await fetch(url,opts); }catch(e){ err=e; }
+    if(r && !retryable(r.status)) return r;
+    var ra=r ? +r.headers.get("Retry-After") : 0;
+    if(i>=tries-1 || ra>8){ if(r) return r; throw err; }          /* out of tries, or told to wait too long: give up */
+    await sleep((ra ? ra*1000 : 500*Math.pow(2,i)) + Math.random()*400);
+  }
+}
 function count(sid){ return st.counts[sid]||0; }
 function cap(sid){ return (st.caps && st.caps[sid]) || (BY_ID[sid] && BY_ID[sid].cap) || CAP; }
 function left(sid){ return Math.max(0, cap(sid)-count(sid)); }
@@ -441,11 +464,20 @@ function supaAPI(sb){
     if(/Email not confirmed/i.test(m)) return userErr("Please confirm your email first. Check your inbox for the link we sent.");
     if(/already registered|already been registered|User already/i.test(m)) return userErr("That email is already registered. Sign in instead.");
     if(/Database error saving new user/i.test(m)) return userErr("We couldn't save your registration. Check your details and try again.");
-    if(/rate limit/i.test(m)) return userErr("Too many attempts. Please wait a minute and try again.");
+    if(/rate limit|too many requests|Failed to fetch|NetworkError|timeout|503|504/i.test(m)) return userErr(BUSY_MSG);
     if(/Password should be/i.test(m)) return userErr("Choose a password with at least 6 characters.");
     return userErr(m);
   }
-  async function rpc(fn,args){ var r=await sb.rpc(fn,args||{}); if(r.error) throw friendly(r.error); return r.data; }
+  async function rpc(fn,args){
+    for(var i=0;;i++){
+      var r=await sb.rpc(fn,args||{});
+      if(!r.error) return r.data;
+      /* Retry only "busy" failures (network, 429, 5xx). Booking rules (full, clash...) come back as 4xx and are shown at once.
+         Retrying is safe: booking the same session twice changes nothing, and cancelling twice is a no-op. */
+      if(i>=2 || !retryable(r.status)) throw friendly(r.error);
+      await sleep(500*Math.pow(2,i)+Math.random()*400);
+    }
+  }
   async function profile(){
     var g=await sb.auth.getUser(); var u=g.data&&g.data.user; if(!u) return null;
     var r=await sb.from("students").select("*").eq("user_id",u.id).maybeSingle();
@@ -458,10 +490,22 @@ function supaAPI(sb){
   }
   async function staffMe(){ var rows=await rpc("my_staff"); return rows && rows[0] ? rows[0] : null; }
   var lastRefresh=0, chan=null;
-  async function refresh(){ lastRefresh=Date.now(); try{ var rows=await rpc("session_counts"); var c={}, k={}; (rows||[]).forEach(function(x){ c[x.session_id]=+x.booked; k[x.session_id]=+x.capacity; }); st.counts=c; st.caps=k; render(); }catch(e){} }
+  /* Seat counts. Normally read from /api/catalog, which Vercel's CDN shares between all open pages for 5 s, so the
+     database is not asked once per tab. fresh=true (staff pages, after a booking error) asks the database directly. */
+  async function refresh(fresh){
+    lastRefresh=Date.now();
+    try{
+      var c={}, k={};
+      var cj=null;
+      if(!fresh){ try{ var cr=await fetchRetry("/api/catalog",{},2); if(cr.ok) cj=await cr.json(); }catch(e){} }
+      if(cj && cj.counts){ c=cj.counts; k=cj.capacity||{}; }
+      else { var rows=await rpc("session_counts"); (rows||[]).forEach(function(x){ c[x.session_id]=+x.booked; k[x.session_id]=+x.capacity; }); }
+      st.counts=c; st.caps=k; render(); return true;
+    }catch(e){ return false; }
+  }
   async function staffApi(body,path){
     var s=await sb.auth.getSession(); var t=s.data&&s.data.session&&s.data.session.access_token;
-    var r=await fetch(path||"/api/staff",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(t||"")},body:JSON.stringify(body)});
+    var r=await fetchRetry(path||"/api/staff",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(t||"")},body:JSON.stringify(body)});
     var j={}; try{ j=await r.json(); }catch(e){}
     if(!r.ok) throw userErr(j.error||"Something went wrong. Please try again.");
     return j;
@@ -469,10 +513,12 @@ function supaAPI(sb){
   return {
     live:true, canDownload:true,
     subscribe: function(){
-      refresh();
-      /* Every open page polls the seat counts. 30 s plus a random offset spreads thousands of
-         open pages evenly, and hidden tabs stop polling until the student comes back. */
-      setInterval(function(){ if(!document.hidden) refresh(); }, 30000 + Math.floor(Math.random()*10000));
+      /* Every open page polls the seat counts every 30-40 s (random, so pages opened together spread out).
+         Hidden tabs skip polling. After a failure the wait doubles (up to 5 minutes) so a struggling server gets room. */
+      var base=30000+Math.floor(Math.random()*10000), wait=base;
+      function loop(){ setTimeout(async function(){ if(!document.hidden){ var ok=await refresh(); wait = ok ? base : Math.min(wait*2, 300000); } loop(); }, wait); }
+      if(Object.keys(st.counts||{}).length) loop();                                    /* counts already came with the catalog */
+      else setTimeout(function(){ refresh().then(loop); }, Math.floor(Math.random()*3000));
       document.addEventListener("visibilitychange", function(){ if(!document.hidden && Date.now()-lastRefresh > 20000) refresh(); });
     },
     refresh: refresh,
@@ -485,7 +531,7 @@ function supaAPI(sb){
     },
     signIn: async function(num,pw){
       /* The student number -> email lookup happens on the server (/api/login), never in the browser. */
-      var resp=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({student_number:num,password:pw})});
+      var resp=await fetchRetry("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({student_number:num,password:pw})});
       var j={}; try{ j=await resp.json(); }catch(e){}
       if(!resp.ok) throw userErr(j.error||"Couldn't sign in right now. Please try again.");
       var ss=await sb.auth.setSession({access_token:j.access_token,refresh_token:j.refresh_token}); if(ss.error) throw friendly(ss.error);
@@ -1166,7 +1212,7 @@ function onAdminEvent(){ clearTimeout(liveT); liveT=setTimeout(function(){ syncA
 async function syncAdmin(force){
   if(!st.staff || syncing) return; syncing=true;
   try{
-    if(API.refresh) await API.refresh();
+    if(API.refresh) await API.refresh(true);
     var gap=(st.adminSession || st.adminQ.trim()) ? 5000 : 15000, wait=gap-(Date.now()-lastRoster);
     if(force || wait<=0){ await loadAdmin(); lastRoster=Date.now(); }
     else { clearTimeout(liveT); liveT=setTimeout(function(){ syncAdmin(false); },wait+50); }
@@ -1328,8 +1374,8 @@ async function submitBook(){
   try{
     var res=await API.register(payloadFor(b,sid,gsid));
     st.booking=res; st.pick=null; st.view="mine"; st.msg={text:"You're booked for "+longLabel(s)+"."};
-    st.busy=false; render(); window.scrollTo(0,0); if(API.notify) API.notify(); return;
-  }catch(err){ st.sheetMsg={err:true,text:err.user?err.message:"Couldn't save your booking. Check your connection and try again."}; if(API&&API.refresh) API.refresh(); }
+    st.busy=false; render(); window.scrollTo(0,0); if(API.notify) API.notify(); if(API.refresh) API.refresh(true); return;
+  }catch(err){ st.sheetMsg={err:true,text:err.user?err.message:"Couldn't save your booking. Check your connection and try again."}; if(API&&API.refresh) API.refresh(true); }
   st.busy=false; render();
 }
 async function dropSeat(sid){

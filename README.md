@@ -162,6 +162,24 @@ What the code already does to stay fast:
 Until `MNOTIFY_API_KEY` is set, booking still works but no texts are sent. One text is about 1 credit per
 student per 160 characters; the messages are written to fit in one. Phone numbers must be Ghana numbers
 (for example 024 123 4567); registration rejects anything else.
+## Busy day checklist (hundreds of students at once)
+
+The site is built to absorb a rush: the page and the session list/seat counts (`/api/catalog`) are served from Vercel's CDN
+(counts refresh every 5 seconds, booking still checks real capacity in the database), pages retry briefly when the server is busy,
+and the server functions limit floods (`/api/login`: 8 tries per student number per 10 minutes; texts: 6 calls a minute per student).
+
+Do these before sharing the link:
+1. **Supabase -> Authentication -> Rate Limits:** raise **"Sign-ups and sign-ins"** to about **1000** per 5 minutes (and raise "Token refreshes").
+   This matters most: every sign-in reaches Supabase from Vercel's servers, and students on campus Wi-Fi share one address, so the default
+   limit would block most of them.
+2. **Wake the database:** a free Supabase project pauses after a week without use. Open the site (or the Supabase dashboard) the day before.
+   For a very large event, Supabase Pro (about $25/month) gives more capacity and never pauses.
+3. **mNotify:** top up SMS credits (one text per booking, plus the welcome text).
+4. **During the rush:** watch Supabase -> Reports (API requests, errors) and Vercel -> Observability. If the traffic looks like an attack,
+   turn on **Vercel -> Firewall -> Attack Challenge Mode**.
+
+When the site is busy, students see "Lots of students are using the site right now…" and the page retries by itself; they do not need to refresh.
+
 - **See raw data:** Supabase → Table Editor → `students`, `bookings`, `staff`.
 - **Change session times, titles or capacity:** edit the `sessions` table in Supabase (Table Editor -> `sessions`:
   `starts_at`, `ends_at`, `title`, `capacity`). The website reads the list from the database when it opens, so there is

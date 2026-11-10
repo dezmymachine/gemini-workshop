@@ -2,13 +2,15 @@
 //   "welcome"  a short thank-you text, sent once, right after the account is created
 //   "confirm"  (default) a booking confirmation text per booked session, with the join link if staff have set one
 // Safe to call repeatedly: each text is sent only once.
-const { bodyOf, requireUser } = require('./_lib');
+const { bodyOf, requireUser, limit, tooMany } = require('./_lib');
 const sms = require('./_sms');
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const ctx = await requireUser(req, res); if (!ctx) return;
   if (!sms.configured()) return res.status(200).json({ ok: true, skipped: 'SMS is not set up yet.' });
+  const wait = limit('notify:' + ctx.user.id, 6, 60000);   // each call can send a text, so cap it
+  if (wait) return tooMany(res, wait);
   const { admin, user } = ctx, kind = bodyOf(req).kind === 'welcome' ? 'welcome' : 'confirm';
 
   const { data: me } = await admin.from('students').select('name, phone, welcome_sent_at').eq('user_id', user.id).maybeSingle();

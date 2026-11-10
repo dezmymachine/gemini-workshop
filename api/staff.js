@@ -1,6 +1,7 @@
 // Staff management for super admins: list, create, update and remove staff accounts.
 // Runs on Vercel with the Supabase service role key, which never reaches the browser.
 const { createClient } = require('@supabase/supabase-js');
+const { limit, tooMany } = require('./_lib');
 
 const ROLES = ['super', 'organiser', 'coord'];
 const COLLEGES = ['CoE', 'CoS', 'CoHSS', 'CABE', 'CoHS', 'CANR', 'IDL'];
@@ -17,6 +18,8 @@ module.exports = async (req, res) => {
   if (!token) return bad(res, 401, 'Please sign in again.');
   const { data: who, error: whoErr } = await admin.auth.getUser(token);
   if (whoErr || !who || !who.user) return bad(res, 401, 'Please sign in again.');
+  const wait = limit('user:' + who.user.id, 120, 60000);
+  if (wait) return tooMany(res, wait);
   const { data: me } = await admin.from('staff').select('user_id, role').eq('user_id', who.user.id).maybeSingle();
   if (!me || me.role !== 'super') return bad(res, 403, 'Only a super admin can manage staff.');
 
