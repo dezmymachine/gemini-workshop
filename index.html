@@ -383,6 +383,8 @@ async function loadSessions(sb){
     : f.month===l.month ? f.dom+"–"+l.dom+" "+l.month+" "+l.year : f.dom+" "+f.month.slice(0,3)+" – "+l.dom+" "+l.month.slice(0,3)+" "+l.year;
 }
 function isPG(level){ return /^Postgraduate/.test(level||""); }
+/* Display only: the university says "Year 1" … "Year 6". The stored value stays "Level 100" … "Level 600". */
+function yearLabel(l){ var m=/^Level ([1-6])00$/.exec(l||""); return m ? "Year "+m[1] : (l||""); }
 function collegesFor(track){ return COLLEGES.filter(function(c){ return c.track===track; }); }
 function collegeName(id){ return (COLLEGES.filter(function(c){return c.id===id;})[0]||{}).name||id||""; }
 
@@ -752,7 +754,7 @@ function bookedCard(sid){
 }
 function renderProfile(){
   var b=st.booking, ini=String(b.n||"?").trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
-  var rows=[["Student number",b.i,true],["Email",b.e],["Phone",b.ph||"—",true],["College",collegeName(b.c)],["Level",b.l],["Programme",b.p]];
+  var rows=[["Student number",b.i,true],["Email",b.e],["Phone",b.ph||"—",true],["College",collegeName(b.c)],["Year",yearLabel(b.l)],["Programme",b.p]];
   var n=myIds().length;
   return msgHTML()+'<div class="sec-head"><div><h2>Profile</h2></div></div>'+
     '<div class="panel pfpage"><div class="pfhead"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div style="min-width:0"><h3>'+esc(b.n)+'</h3><span class="muted">'+(isPG(b.l)?'Postgraduate student':'Student')+' · '+n+' session'+(n===1?'':'s')+' booked</span></div></div>'+
@@ -769,7 +771,7 @@ function renderMine(){
   }
   var ini=String(b.n||"?").trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join("").toUpperCase();
   h+='<div class="sec-head"><div><h2>My Sessions</h2><p>Your joining link appears on each session once the organisers add it. We also send it to you by email or SMS.</p></div></div>';
-  h+='<div class="dash"><aside class="profile panel"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div><h3>'+esc(b.n)+'</h3><span class="muted">'+esc(b.l)+'</span></div>'+
+  h+='<div class="dash"><aside class="profile panel"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div><h3>'+esc(b.n)+'</h3><span class="muted">'+esc(yearLabel(b.l))+'</span></div>'+
     '<dl><div><dt>Student number</dt><dd class="mono">'+esc(b.i)+'</dd></div><div><dt>Email</dt><dd>'+esc(b.e)+'</dd></div><div><dt>Phone</dt><dd class="mono">'+esc(b.ph||'—')+'</dd></div><div><dt>College</dt><dd>'+esc(collegeName(b.c))+'</dd></div><div><dt>Programme</dt><dd>'+esc(b.p)+'</dd></div></dl>'+
     '</aside><section class="list" style="min-width:0">';
   if(b.s) h+=bookedCard(b.s); else h+='<div class="empty">You don\'t have a college session yet. <button class="linkbtn" data-act="findCollege">Find a session for your college</button></div>';
@@ -841,8 +843,8 @@ function frApply(list){ var f=st.fr; return list.filter(function(x){ return (f.c
 function frBar(list,withSession){
   var cols={}, lvls={}, sids={}; list.forEach(function(x){ cols[x.r.c]=1; lvls[x.r.l]=1; sids[x.sid]=1; });
   var colOpts=[["all","All colleges"]].concat(Object.keys(cols).sort().map(function(c){ return [c,c]; }));
-  var lvlOpts=[["all","All levels"],["ug","Undergraduate (all)"],["pg","Postgraduate (all)"]].concat(LEVELS.filter(function(l){ return lvls[l]; }).map(function(l){ return [l,l]; }));
-  var h='<div class="fbar" role="group" aria-label="Filter students">'+selHTML("fr.college","College",colOpts,st.fr.college)+selHTML("fr.level","Level",lvlOpts,st.fr.level);
+  var lvlOpts=[["all","All years"],["ug","Undergraduate (all)"],["pg","Postgraduate (all)"]].concat(LEVELS.filter(function(l){ return lvls[l]; }).map(function(l){ return [l,yearLabel(l)]; }));
+  var h='<div class="fbar" role="group" aria-label="Filter students">'+selHTML("fr.college","College",colOpts,st.fr.college)+selHTML("fr.level","Year",lvlOpts,st.fr.level);
   if(withSession) h+=selHTML("fr.session","Session",[["all","All sessions"]].concat(SESSIONS.filter(function(s){ return sids[s.id]; }).map(function(s){ return [s.id,longLabel(s)]; })),st.fr.session);
   return h+(frActive()?'<button type="button" class="linkbtn" data-act="clearFilters" data-set="fr">Clear filters</button>':'')+'</div>';
 }
@@ -989,8 +991,8 @@ function rosterTable(rows,withSession,key){
   if(!rows.length) return '<div class="empty">No matching registrations.</div>';
   rows=rows.slice().sort(function(a,b){ return String(a.r.n).localeCompare(String(b.r.n)); });
   var pg=pageSlice(key||"roster",rows,PAGE_PEOPLE); rows=pg.items;
-  return '<table><thead><tr><th>Name</th><th>Student no.</th><th>Email</th><th>Phone</th><th>College</th><th>Programme</th><th>Level</th>'+(withSession?'<th>Session</th>':'')+'</tr></thead><tbody>'+
-    rows.map(function(x){ var k=normIndex(x.r.i); return '<tr><td>'+esc(x.r.n)+'</td><td class="mono">'+esc(x.r.i)+'</td><td>'+esc(x.r.e)+' '+(x.r.es&&x.r.es!=="ok"?'<span class="pill full">'+(x.r.es==="complained"?'Spam report':'Bounced')+'</span>':'<span class="pill plain">'+(viaEmail(x.r)?'Email':'SMS')+'</span>')+'</td><td class="mono">'+esc(x.r.ph||'')+'</td><td>'+esc(x.r.c)+'</td><td>'+esc(x.r.p)+'</td><td>'+esc(x.r.l)+'</td>'+(withSession?'<td>'+esc(longLabel(BY_ID[x.sid]))+'</td>':'')+
+  return '<table><thead><tr><th>Name</th><th>Student no.</th><th>Email</th><th>Phone</th><th>College</th><th>Programme</th><th>Year</th>'+(withSession?'<th>Session</th>':'')+'</tr></thead><tbody>'+
+    rows.map(function(x){ var k=normIndex(x.r.i); return '<tr><td>'+esc(x.r.n)+'</td><td class="mono">'+esc(x.r.i)+'</td><td>'+esc(x.r.e)+' '+(x.r.es&&x.r.es!=="ok"?'<span class="pill full">'+(x.r.es==="complained"?'Spam report':'Bounced')+'</span>':'<span class="pill plain">'+(viaEmail(x.r)?'Email':'SMS')+'</span>')+'</td><td class="mono">'+esc(x.r.ph||'')+'</td><td>'+esc(x.r.c)+'</td><td>'+esc(x.r.p)+'</td><td>'+esc(yearLabel(x.r.l))+'</td>'+(withSession?'<td>'+esc(longLabel(BY_ID[x.sid]))+'</td>':'')+
       '</tr>'; }).join("")+'</tbody></table>'+pagerHTML(key||"roster",pg);
 }
 function renderUsers(){
@@ -1089,8 +1091,8 @@ function authHTML(){
         afield("up.phone","Phone number","tel",up.phone,'autocomplete="tel" inputmode="tel" placeholder="e.g. 024 123 4567" required')+
         '<div class="field span2"><label for="up.college">College</label><select id="up.college" data-auth="up.college" required><option value="">Choose your college</option>'+
           COLLEGES.map(function(c){return '<option value="'+c.id+'"'+(up.college===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join("")+'</select></div>'+
-        '<div class="field"><label for="up.level">Level</label><select id="up.level" data-auth="up.level" required><option value="">Choose your level</option>'+
-          LEVELS.map(function(l){return '<option'+(up.level===l?' selected':'')+'>'+esc(l)+'</option>';}).join("")+'</select></div>'+
+        '<div class="field"><label for="up.level">Year</label><select id="up.level" data-auth="up.level" required><option value="">Choose your year</option>'+
+          LEVELS.map(function(l){return '<option value="'+esc(l)+'"'+(up.level===l?' selected':'')+'>'+esc(yearLabel(l))+'</option>';}).join("")+'</select></div>'+
         afield("up.programme","Programme of study","text",up.programme,'placeholder="e.g. BSc Civil Engineering" required')+
         '<div class="span2 btns"><button class="btn back" type="button" data-act="upBack"'+(A.busy?' disabled':'')+'>Back</button><button class="btn primary grow" type="submit"'+(A.busy?' disabled':'')+'>'+(A.busy?'Creating account…':'Create account')+'</button></div>'+
       '</div></form>'+
@@ -1136,7 +1138,7 @@ function normPhone(p){ var d=String(p||"").replace(/[^0-9]/g,""); if(d.indexOf("
 function checkUpStep2(f){
   var miss=[]; if(!normIndex(f.index)) miss.push("student number");
   if(!normPhone(f.phone)) miss.push("a valid Ghana phone number, like 024 123 4567");
-  if(!f.college) miss.push("college"); if(!f.level) miss.push("level"); if(!f.programme.trim()) miss.push("programme");
+  if(!f.college) miss.push("college"); if(!f.level) miss.push("year"); if(!f.programme.trim()) miss.push("programme");
   return miss.length ? "Please add "+miss.join(", ")+"." : "";
 }
 function focusUp(id){ setTimeout(function(){ var el=document.getElementById(id); if(el) el.focus(); },0); }
@@ -1397,9 +1399,9 @@ async function dropSeat(sid){
   st.busy=false; st.confirmDrop=null; render();
 }
 async function downloadCSV(){
-  var lines=[["Date","Time","Track","Session","Session ID","Name","Student number","Email","Phone","College","Programme","Level","Registered at","Booked?"]];
-  allRows().forEach(function(x){ var s=BY_ID[x.sid]; lines.push([DAYS[s.day].date,s.time,TRACKS[s.track].name+" ("+TRACKS[s.track].code+")",s.title,s.id,x.r.n,x.r.i,x.r.e,x.r.ph||"",x.r.c,x.r.p,x.r.l,x.r.t?new Date(x.r.t).toISOString():"","Yes"]); });
-  (st.unbooked||[]).forEach(function(r){ lines.push(["","","","","",r.n,r.i,r.e,r.ph||"",r.c,r.p,r.l,r.t?new Date(r.t).toISOString():"","No"]); });
+  var lines=[["Date","Time","Track","Session","Session ID","Name","Student number","Email","Phone","College","Programme","Year","Registered at","Booked?"]];
+  allRows().forEach(function(x){ var s=BY_ID[x.sid]; lines.push([DAYS[s.day].date,s.time,TRACKS[s.track].name+" ("+TRACKS[s.track].code+")",s.title,s.id,x.r.n,x.r.i,x.r.e,x.r.ph||"",x.r.c,x.r.p,yearLabel(x.r.l),x.r.t?new Date(x.r.t).toISOString():"","Yes"]); });
+  (st.unbooked||[]).forEach(function(r){ lines.push(["","","","","",r.n,r.i,r.e,r.ph||"",r.c,r.p,yearLabel(r.l),r.t?new Date(r.t).toISOString():"","No"]); });
   var csv=lines.map(function(l){ return l.map(function(v){ v=String(v==null?"":v); if(/^[=+\-@\t\r]/.test(v)) v="'"+v; return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(","); }).join("\n");
   try{ await API.download("gemini-workshop-registrations.csv", csv); }
   catch(err){ if(err && err.code!=="declined"){ st.msg={err:true,text:"The download couldn't start here."}; render(); } }
