@@ -85,8 +85,8 @@ If you later change an environment variable, redeploy (Deployments → ⋯ → R
 
 | Role | Can do |
 | --- | --- |
-| Super admin | Everything: all registrations, CSV downloads, session meeting links and texting them, add/edit/remove staff |
-| Organiser | All registrations, CSV downloads, session meeting links and texting them |
+| Super admin | Everything: all registrations, CSV downloads, session meeting links and sending them, add/edit/remove staff |
+| Organiser | All registrations, CSV downloads, session meeting links and sending them |
 | College coordinator | Registrations for their own college only |
 
 The database enforces these rules, so a coordinator can never load another
@@ -109,7 +109,7 @@ The limits that matter are in Supabase:
    sign-ins can come from one IP address. On campus Wi-Fi or in a computer lab, hundreds of
    students share the same public IP and will start seeing "Too many attempts". Go to
    **Authentication → Rate Limits** and raise the sign-up and sign-in limits for registration week.
-2. **Email.** Connect a real SMTP service (Step 1.5). The built-in sender is for testing only.
+2. **Email.** Supabase's built-in sender (password resets) is for testing only; see Email setup below.
 3. **Plan.** Free projects are paused after a period of no activity and run on the smallest
    database. For the registration window and the event days, use the Pro plan. Under **Project
    Settings → Compute** you can temporarily pick a larger size and scale back afterwards.
@@ -134,15 +134,72 @@ What the code already does to stay fast:
   page and get a reset link by email.
 - **Add the Google Meet link for a session:** Staff portal -> Registrations -> **View list** on the
   session -> **Meeting link**. Paste the link and click **Save link**. Super admins and organisers only.
-- **Text the link to everyone booked on a session:** on that session's page click
-  **Text link to booked students** and confirm. You can press it again after changing a link.
-  Big classes are sent through a queue in batches of 100 with a progress bar, so nothing times out
+- **Send the link to everyone booked on a session:** on that session's page click
+  **Send link to booked students** and confirm (it shows how many go by email and how many by SMS).
+  You can press it again after changing a link.
+  Big classes are sent through a queue in batches of 50 with a progress bar, so nothing times out
   (keep the page open until it says Finished). If it is interrupted, press **Resume sending**;
-  texts that failed can be sent again with **Retry failed**, and nobody is texted twice.
+  messages that failed can be sent again with **Retry failed**, and nobody gets the same message twice.
   The daily job also finishes any broadcast left half-sent.
-  Students also get a welcome text when they register, a confirmation text when they book and a reminder the day before (daily job at 08:00 Ghana time).
+  Students also get a welcome message when they register, a confirmation when they book and a reminder the day before (daily job at 08:00 Ghana time).
 
-## SMS setup (mNotify)
+## How messages reach students: email or SMS
+
+Each student gets **email** if they registered with a public mailbox they read on their phone
+(Gmail, Yahoo, Outlook/Hotmail/Live, iCloud, AOL, Proton) and **SMS** otherwise: student and school
+addresses (`@st.knust.edu.gh`, `@knust.edu.gh`, …), work addresses and typos such as `gmail.comm`.
+A student whose email bounces or who reports it as spam is switched to SMS automatically.
+The rule lives in `api/_send.js`; to change the list without editing code, set `EMAIL_DOMAINS`
+(comma list, for example `gmail.com,yahoo.com,icloud.com`) in Vercel. Staff see an **Email** / **SMS**
+tag next to each student, and **Bounced** / **Spam report** when an address is bad.
+
+To see the split for the current students (read-only, sends nothing):
+
+```
+set -a; . ./.env; set +a; node tools/channel-report.js
+```
+
+## Email setup (Amazon SES, from your own domain)
+
+Emails come from `workshop@kecworkshops.com` through Amazon SES (about $0.10 per 1,000 emails).
+Use region **eu-west-1 (Ireland)** throughout. DNS records go in **Cloudflare -> kecworkshops.com -> DNS**,
+always as **DNS only (grey cloud)**.
+
+1. **AWS Billing -> Budgets:** create a $2 monthly budget alert, so nothing can surprise you.
+2. **SES -> Identities -> Create identity -> Domain** `kecworkshops.com`, Easy DKIM, RSA 2048.
+   Add the **3 CNAME** records it shows in Cloudflare. The identity turns *Verified* within minutes to an hour.
+3. On that identity, **Custom MAIL FROM domain** `mail.kecworkshops.com`, then add in Cloudflare:
+   - `MX mail -> feedback-smtp.eu-west-1.amazonses.com` (priority 10)
+   - `TXT mail -> v=spf1 include:amazonses.com ~all`
+4. **DMARC:** `TXT _dmarc -> v=DMARC1; p=none; rua=mailto:workshop@kecworkshops.com`.
+   After a week with no problems change `p=none` to `p=quarantine`.
+5. **Replies:** Cloudflare -> Email -> **Email Routing**: forward `workshop@kecworkshops.com` to your Gmail (free).
+6. **Leave the sandbox:** SES -> Account dashboard -> **Request production access**. Type: Transactional.
+   Describe it as: registration and joining-link emails for a university workshop, sent only to students who
+   registered on the site themselves; bounces and complaints are handled automatically (the address is
+   switched off and the student gets SMS instead). Until approved, SES only delivers to addresses you verify
+   yourself, which is fine for testing.
+7. **SES -> SMTP settings -> Create SMTP credentials.** Save the username and password (this is not your AWS access key).
+8. **Supabase SQL Editor:** run `supabase/migrations/007_email.sql` **before** deploying the new code.
+9. **Vercel -> Settings -> Environment Variables** (add them **after** production access is approved, then redeploy):
+
+   | Name | Value |
+   | --- | --- |
+   | `SMTP_HOST` | `email-smtp.eu-west-1.amazonaws.com` |
+   | `SMTP_PORT` | `587` |
+   | `SMTP_USER` / `SMTP_PASS` | the SMTP credentials from step 7 |
+   | `MAIL_FROM` | `Gemini Workshop <workshop@kecworkshops.com>` |
+   | `SES_EVENTS_SECRET` | any long random text |
+
+10. **Bounce and complaint feedback** (after the deploy): **SNS -> Topics -> Create topic** (Standard, e.g. `ses-events`),
+    then **Create subscription**: protocol HTTPS, endpoint `https://<your site>/api/mail-events?key=<SES_EVENTS_SECRET>`.
+    It confirms itself within seconds. Then **SES -> your identity -> Notifications -> Edit**: send **Bounce** and
+    **Complaint** to that topic. Optionally set `SES_TOPIC_ARN` in Vercel so only that topic is accepted.
+11. **Check it:** send yourself a message, open it in Gmail -> ⋮ -> **Show original** and confirm SPF, DKIM and DMARC say **PASS**.
+
+While the `SMTP_*` settings are missing, everyone gets SMS as before.
+
+## SMS setup (mNotify, for school addresses and bounced emails)
 
 1. Log in at **mnotify.com**, top up your SMS credits and copy your API key (Developers / API).
 2. Register a **Sender ID** in the mNotify dashboard (a name of up to 11 characters, for example `GeminiWksp`; it is not a phone number). Approval can take a day or two; until then `mNotify` is used.
@@ -157,16 +214,16 @@ What the code already does to stay fast:
 4. Run these files once, in order, in the Supabase SQL Editor:
    `002_session_links_and_emails.sql`, `003_email_queue.sql`, `004_realtime.sql`, `005_realtime_students.sql`
    and `006_sms.sql` (all in `supabase/migrations/`; a brand-new project gets everything from `schema.sql` instead).
-   The tables are still called `email_queue` and `email_log` for historical reasons; they now hold text messages.
+   Then `007_email.sql` (see Email setup). The tables `email_queue` and `email_log` hold both emails and texts.
 
-Until `MNOTIFY_API_KEY` is set, booking still works but no texts are sent. One text is about 1 credit per
+Until `MNOTIFY_API_KEY` is set, students without a public mailbox get nothing (the rest still get email). One text is about 1 credit per
 student per 160 characters; the messages are written to fit in one. Phone numbers must be Ghana numbers
 (for example 024 123 4567); registration rejects anything else.
 ## Busy day checklist (hundreds of students at once)
 
 The site is built to absorb a rush: the page and the session list/seat counts (`/api/catalog`) are served from Vercel's CDN
 (counts refresh every 5 seconds, booking still checks real capacity in the database), pages retry briefly when the server is busy,
-and the server functions limit floods (`/api/login`: 8 tries per student number per 10 minutes; texts: 6 calls a minute per student).
+and the server functions limit floods (`/api/login`: 8 tries per student number per 10 minutes; messages: 6 calls a minute per student).
 
 Do these before sharing the link:
 1. **Supabase -> Authentication -> Rate Limits:** raise **"Sign-ups and sign-ins"** to about **1000** per 5 minutes (and raise "Token refreshes").
@@ -174,7 +231,7 @@ Do these before sharing the link:
    limit would block most of them.
 2. **Wake the database:** a free Supabase project pauses after a week without use. Open the site (or the Supabase dashboard) the day before.
    For a very large event, Supabase Pro (about $25/month) gives more capacity and never pauses.
-3. **mNotify:** top up SMS credits (one text per booking, plus the welcome text).
+3. **mNotify:** keep some SMS credit for students with school addresses (`node tools/channel-report.js` shows how many). Check the SES sending quota in the SES Account dashboard.
 4. **During the rush:** watch Supabase -> Reports (API requests, errors) and Vercel -> Observability. If the traffic looks like an attack,
    turn on **Vercel -> Firewall -> Attack Challenge Mode**.
 

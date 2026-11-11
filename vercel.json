@@ -37,5 +37,16 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/remind.js": {
+      "maxDuration": 60
+    },
+    "api/broadcast.js": {
+      "maxDuration": 30
+    },
+    "api/notify.js": {
+      "maxDuration": 30
+    }
+  }
 }

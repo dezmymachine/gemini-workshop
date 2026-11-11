@@ -1,18 +1,19 @@
 // Runs once a day (see vercel.json "crons"). Vercel calls it with "Authorization: Bearer <CRON_SECRET>".
-//  1. Texts a reminder to everyone booked on a session that happens tomorrow (Ghana time = UTC).
-//  2. Safety net: texts any booking confirmation that was missed (for example a student closed the tab).
+//  1. Sends a reminder to everyone booked on a session that happens tomorrow (Ghana time = UTC).
+//  2. Safety net: sends any booking confirmation that was missed (for example a student closed the tab).
+// Email or SMS per student, see _send.js.
 // Reports sessions that still have no meeting link so staff can add one.
 const { adminClient } = require('./_lib');
-const sms = require('./_sms');
+const send = require('./_send');
 const queue = require('./_queue');
 
-const BUDGET_MS = 8000; // stay inside a short function time limit; anything left is picked up next run (nothing is sent twice)
+const BUDGET_MS = 45000; // stay inside the 60 s limit set in vercel.json; anything left is picked up next run (nothing is sent twice)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function allBookings(admin, filter) {
   const out = [];
   for (let from = 0; ; from += 1000) {
-    let q = admin.from('bookings').select('student_id, session_id, students(name, phone), sessions(id, track, title, grasag, starts_at, ends_at)').order('student_id').range(from, from + 999);
+    let q = admin.from('bookings').select('student_id, session_id, students(name, email, email_status, phone), sessions(id, track, title, grasag, starts_at, ends_at)').order('student_id').range(from, from + 999);
     if (filter) q = filter(q);
     const { data, error } = await q; if (error) throw error;
     out.push(...(data || [])); if (!data || data.length < 1000) break;
@@ -26,7 +27,7 @@ module.exports = async (req, res) => {
   if (!secret || String(req.headers.authorization || '') !== 'Bearer ' + secret) return res.status(401).json({ error: 'Not allowed.' });
   const admin = adminClient();
   if (!admin) return res.status(500).json({ error: 'Missing Supabase settings.' });
-  if (!sms.configured()) return res.status(200).json({ ok: true, skipped: 'SMS is not set up yet.' });
+  if (!send.configured()) return res.status(200).json({ ok: true, skipped: 'Messages are not set up yet.' });
 
   const started = Date.now();
   try {
@@ -35,7 +36,7 @@ module.exports = async (req, res) => {
     const tomorrow = { from: new Date(dayStart).toISOString(), to: new Date(dayStart + 86400000).toISOString() };
 
     // Read the whole log page by page: the database returns at most 1000 rows per request, so a single
-    // read would silently miss older entries and the same student could be texted twice.
+    // read would silently miss older entries and the same student could be messaged twice.
     const done = new Set();
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin.from('email_log').select('student_id, session_id, kind').order('student_id').order('session_id').order('kind').range(from, from + 999);
@@ -55,16 +56,18 @@ module.exports = async (req, res) => {
       if (startsAt >= tomorrow.from && startsAt < tomorrow.to && !done.has(key('reminder'))) plan.push({ kind: 'reminder', b });
     });
 
-    // Send in layers of 100, oldest first, and stop before the time budget runs out.
+    // Send in layers, oldest first, and stop before the time budget runs out.
     let sent = 0, failed = 0, remaining = 0;
     for (const kind of ['confirm', 'reminder']) {
       const group = plan.filter((p) => p.kind === kind);
       for (let i = 0; i < group.length; i += queue.BATCH) {
         if (Date.now() - started > BUDGET_MS) { remaining += group.length - i; break; }
         const chunk = group.slice(i, i + queue.BATCH);
-        const r = await sms.sendAll(chunk.map((p) => ({ phone: p.b.students.phone, message: sms.templates[kind](p.b.students.name, p.b.sessions, link[p.b.session_id]) })));
+        const r = await send.deliver(admin, kind, chunk.map((p) => ({ student_id: p.b.student_id, ...p.b.students, session: p.b.sessions, link: link[p.b.session_id] })));
         sent += r.sent; failed += r.failed;
-        if (r.sent) await admin.from('email_log').upsert(chunk.map((p) => ({ student_id: p.b.student_id, session_id: p.b.session_id, kind })), { onConflict: 'student_id,session_id,kind', ignoreDuplicates: true });
+        const logged = [];
+        chunk.forEach((p, k) => { if (r.results[k].ok) logged.push({ student_id: p.b.student_id, session_id: p.b.session_id, kind, channel: r.results[k].channel }); });
+        if (logged.length) await admin.from('email_log').upsert(logged, { onConflict: 'student_id,session_id,kind', ignoreDuplicates: true });
         await sleep(600);
       }
     }

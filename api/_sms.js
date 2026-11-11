@@ -53,23 +53,27 @@ async function sendOne(numbers, message) {
 }
 
 // items: [{ phone, message }]. Messages that are identical share calls of up to 100 numbers.
-// Numbers that are not valid Ghana numbers count as failed. Returns { sent, failed, error }.
+// Numbers that are not valid Ghana numbers count as failed. Returns { sent, failed, error, ok }, where ok[i]
+// says whether item i went out in an accepted call (mNotify does not say which single number it rejected).
 async function sendAll(items) {
   const groups = new Map(); let sent = 0, failed = 0, error = '', calls = 0;
-  for (const it of items) {
+  const ok = items.map(() => false);
+  items.forEach((it, idx) => {
     const n = normalizePhone(it.phone);
-    if (!n) { failed++; continue; }
+    if (!n) { failed++; return; }
     if (!groups.has(it.message)) groups.set(it.message, []);
-    groups.get(it.message).push(n);
-  }
-  for (const [message, nums] of groups) {
-    for (let i = 0; i < nums.length; i += 100) {
+    groups.get(it.message).push({ n, idx });
+  });
+  for (const [message, list] of groups) {
+    for (let i = 0; i < list.length; i += 100) {
       if (calls++) await sleep(300);
-      const r = await sendOne(nums.slice(i, i + 100), message);
+      const part = list.slice(i, i + 100);
+      const r = await sendOne(part.map((p) => p.n), message);
       sent += r.sent; failed += r.failed; if (r.error) error = r.error;
+      if (r.sent) part.forEach((p) => { ok[p.idx] = true; });
     }
   }
-  return { sent, failed, error };
+  return { sent, failed, error, ok };
 }
 
 module.exports = { configured, normalizePhone, templates, sendAll, label, when };

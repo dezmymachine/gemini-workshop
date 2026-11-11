@@ -90,7 +90,9 @@ create table public.students (
   programme      text not null check (length(trim(programme)) > 0),
   level          text not null check (level in ('Level 100','Level 200','Level 300','Level 400','Level 500','Level 600','Postgraduate (Masters)','Postgraduate (PhD)')),
   created_at     timestamptz not null default now(),
-  welcome_sent_at timestamptz                   -- set once the welcome SMS has been sent
+  welcome_sent_at timestamptz,                  -- set once the welcome message has been sent
+  email_status   text not null default 'ok' check (email_status in ('ok', 'bounced', 'complained')), -- SES bounce/complaint: text instead
+  email_bad_at   timestamptz
 );
 
 create table public.staff (
@@ -277,11 +279,12 @@ create table public.session_links (
   updated_at timestamptz not null default now()
 );
 
--- Which automatic emails each student has already received (stops duplicates).
+-- Which automatic messages (email or SMS) each student has already received (stops duplicates).
 create table public.email_log (
   student_id uuid not null references public.students(user_id) on delete cascade,
   session_id text not null references public.sessions(id) on delete cascade,
   kind       text not null check (kind in ('confirm', 'reminder')),
+  channel    text check (channel in ('email', 'sms')),   -- how the message reached the student
   sent_at    timestamptz not null default now(),
   primary key (student_id, session_id, kind)
 );
@@ -315,7 +318,7 @@ create table public.email_queue (
   id           bigserial primary key,
   broadcast_id bigint not null references public.session_broadcasts(id) on delete cascade,
   student_id   uuid references public.students(user_id) on delete cascade,
-  to_email     text,                             -- old email column, no longer used
+  to_email     text,                             -- used when the student gets email (public mailbox)
   to_phone     text,
   name         text not null,
   status       text not null default 'pending' check (status in ('pending', 'sending', 'sent', 'failed')),
