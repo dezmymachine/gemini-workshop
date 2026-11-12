@@ -23,11 +23,13 @@ function isPublicMailbox(email) { const d = domainOf(email); return !!d && email
 function configured() { return mail.configured() || sms.configured(); }
 
 // student: { email, email_status, phone }. Returns 'email', 'sms' or 'none'.
-function channelFor(student) {
+// kind: while the temporary Resend setup is on, only some kinds may go by email (see _mail.js).
+function channelFor(student, kind) {
   const okEmail = (student.email_status || 'ok') === 'ok' && !!mail.normalizeEmail(student.email);
-  if (okEmail && mail.configured() && isPublicMailbox(student.email)) return 'email';
+  const canMail = mail.configured(kind);
+  if (okEmail && canMail && isPublicMailbox(student.email)) return 'email';
   if (sms.configured() && sms.normalizePhone(student.phone)) return 'sms';
-  if (okEmail && mail.configured()) return 'email';   // no usable phone: the school inbox is better than nothing
+  if (okEmail && canMail) return 'email';   // no usable phone: the school inbox is better than nothing
   return 'none';
 }
 
@@ -45,7 +47,7 @@ async function deliver(admin, kind, items) {
   const results = items.map(() => ({ ok: false, channel: 'none', unusable: true }));
   const byMail = [], bySms = [];
   items.forEach((it, i) => {
-    const ch = channelFor(it);
+    const ch = channelFor(it, kind);
     results[i].channel = ch;
     if (ch === 'email') byMail.push(i); else if (ch === 'sms') bySms.push(i);
   });

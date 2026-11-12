@@ -2,15 +2,23 @@
 // Settings (Vercel environment variables): SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASS (SES "SMTP credentials",
 // not the AWS access key) and MAIL_FROM, e.g. "Gemini Workshop <workshop@kecworkshops.com>".
 // MAIL_TRANSPORT=json is a dry run for local testing: nothing is sent, each message is printed to the log.
+//
+// TEMPORARY (until Amazon SES approves production access): when RESEND_API_KEY is set, email goes through Resend
+// instead of SMTP, and only for the kinds in RESEND_KINDS (default: welcome,confirm = registration and booking).
+// To go back to SES: delete RESEND_API_KEY in Vercel (or set MAIL_PROVIDER=smtp) and redeploy. No code change.
 const nodemailer = require('nodemailer');
 const { label, when } = require('./_sms');
 
 function dryRun() { return process.env.MAIL_TRANSPORT === 'json'; }
-function configured() {
+function provider() { return process.env.RESEND_API_KEY && process.env.MAIL_PROVIDER !== 'smtp' ? 'resend' : 'smtp'; }
+function resendKinds() { return String(process.env.RESEND_KINDS || 'welcome,confirm').split(',').map((k) => k.trim()).filter(Boolean); }
+// kind (optional): welcome | confirm | reminder | broadcast. Without it: "can email be sent at all?"
+function configured(kind) {
   if (dryRun()) return true;
+  if (provider() === 'resend') return !kind || resendKinds().includes(kind);
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.MAIL_FROM);
 }
-function fromAddress() { return process.env.MAIL_FROM || 'Gemini Workshop <workshop@kecworkshops.com>'; }
+function fromAddress() { return (provider() === 'resend' && process.env.RESEND_FROM) || process.env.MAIL_FROM || 'Gemini Workshop <workshop@kecworkshops.com>'; }
 function replyAddress() {
   const m = /<([^>]+)>/.exec(fromAddress());
   return process.env.MAIL_REPLY_TO || (m ? m[1] : fromAddress());
@@ -68,6 +76,7 @@ const templates = {
 // Returns { sent, failed, error, ok, refused }: ok[i] = item i went out; refused[i] = the address is refused for good
 // (invalid, or SES will not send to it), so it should not be tried again.
 async function sendAll(items) {
+  if (provider() === 'resend' && !dryRun()) return resendAll(items);
   const t = getTransport(); let sent = 0, failed = 0, error = '';
   const ok = items.map(() => false), refused = items.map(() => false);
   const from = fromAddress(), replyTo = replyAddress();
@@ -87,6 +96,48 @@ async function sendAll(items) {
       if (e && e.responseCode >= 500 && e.responseCode < 600 && !/auth|credential|throttl|rate|quota|not verified|sandbox/i.test(error)) refused[i] = true;
     }
   }));
+  return { sent, failed, error, ok, refused };
+}
+
+// ---------- Resend (temporary) ----------
+// One request per message when there is one; the batch endpoint (up to 100 per request) when there are more.
+async function resendCall(path, body) {
+  try {
+    const r = await fetch('https://api.resend.com' + path, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, error: r.ok ? '' : (j.message || j.name || ('Resend error ' + r.status)) };
+  } catch (e) { return { ok: false, status: 0, error: (e && e.message) || 'Resend unreachable' }; }
+}
+
+async function resendAll(items) {
+  let sent = 0, failed = 0, error = '';
+  const ok = items.map(() => false), refused = items.map(() => false);
+  const from = fromAddress(), replyTo = replyAddress();
+  const msg = (it) => ({
+    from, to: [normalizeEmail(it.email)], reply_to: replyTo, subject: it.subject, text: it.text, html: it.html,
+    headers: { 'List-Unsubscribe': `<mailto:${replyTo}?subject=unsubscribe>` }
+  });
+  const idx = [];
+  items.forEach((it, i) => { if (normalizeEmail(it.email)) idx.push(i); else { failed++; refused[i] = true; } });
+
+  async function one(i) {
+    const r = await resendCall('/emails', msg(items[i]));
+    if (r.ok) { sent++; ok[i] = true; return; }
+    failed++; error = r.error;
+    if (r.status === 422) refused[i] = true;   // Resend rejected this address/message itself: do not retry it
+  }
+  for (let k = 0; k < idx.length; k += 100) {
+    const chunk = idx.slice(k, k + 100);
+    if (chunk.length === 1) { await one(chunk[0]); continue; }
+    const r = await resendCall('/emails/batch', chunk.map((i) => msg(items[i])));
+    if (r.ok) { chunk.forEach((i) => { sent++; ok[i] = true; }); continue; }
+    if (r.status === 422 || r.status === 400) { for (const i of chunk) await one(i); continue; }   // find the bad one
+    chunk.forEach(() => failed++); error = r.error;   // rate limit / quota / outage: try again later
+  }
   return { sent, failed, error, ok, refused };
 }
 
