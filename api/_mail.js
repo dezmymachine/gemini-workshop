@@ -48,10 +48,12 @@ const NOLINK = 'Your joining link will be sent before the session.';
 function sessionLine(s) { const w = when(s); return `${label(s)}, ${w.day}, ${w.time} GMT`; }
 
 // Builds { subject, text, html } from a few short paragraphs. A paragraph can be { link } for the join button.
+// (Check for an object: every string has a built-in .link() method, so p.link alone is always truthy.)
+const isLink = (p) => p && typeof p === "object" && !!p.link;
 function compose(subject, paras) {
-  const text = paras.map((p) => (p.link ? `Join link: ${p.link}` : p)).join('\n\n') +
+  const text = paras.map((p) => (isLink(p) ? `Join link: ${p.link}` : p)).join('\n\n') +
     `\n\nGemini Workshop\nReply to this email if you have a question.`;
-  const body = paras.map((p) => p.link
+  const body = paras.map((p) => isLink(p)
     ? `<p style="margin:20px 0"><a href="${esc(p.link)}" style="background:#1a73e8;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:bold;display:inline-block">Join the session</a></p><p style="margin:0 0 16px;font-size:13px;color:#5f6368">Or open this link: <a href="${esc(p.link)}" style="color:#1a73e8">${esc(p.link)}</a></p>`
     : `<p style="margin:0 0 16px">${esc(p)}</p>`).join('');
   const html = `<!doctype html><html><body style="margin:0;padding:24px;background:#f6f8fc;font-family:Arial,Helvetica,sans-serif;color:#202124;font-size:15px;line-height:1.5">` +
