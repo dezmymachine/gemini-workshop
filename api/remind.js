@@ -2,12 +2,15 @@
 //  1. Sends a reminder to everyone booked on a session that happens tomorrow (Ghana time = UTC).
 //  2. Safety net: sends any booking confirmation that was missed (for example a student closed the tab).
 //  3. Finishes any link broadcast that was left half-sent.
-//  4. Safety net: sends the registration (welcome) email to students who have not booked and never got it.
+//  4. Safety net: sends the joining link to anyone booked after their session's link was broadcast who never got it
+//     (normally sent straight away by api/notify.js; this catches a closed tab or a failed send).
+//  5. Safety net: sends the registration (welcome) email to students who have not booked and never got it.
 // Everything goes by email, see _send.js.
 // Reports sessions that still have no meeting link so staff can add one.
 const { adminClient } = require('./_lib');
 const send = require('./_send');
 const queue = require('./_queue');
+const linkMail = require('./_links');
 
 const BUDGET_MS = 45000; // stay inside the 60 s limit set in vercel.json; anything left is picked up next run (nothing is sent twice)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -39,11 +42,11 @@ module.exports = async (req, res) => {
 
     // Read the whole log page by page: the database returns at most 1000 rows per request, so a single
     // read would silently miss older entries and the same student could be messaged twice.
-    const done = new Set();
+    const done = new Set(), gotLink = new Set();   // gotLink: "session|student|url" already emailed to them
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await admin.from('email_log').select('student_id, session_id, kind').order('student_id').order('session_id').order('kind').range(from, from + 999);
+      const { data, error } = await admin.from('email_log').select('student_id, session_id, kind, link_url').order('student_id').order('session_id').order('kind').range(from, from + 999);
       if (error) throw error;
-      (data || []).forEach((l) => done.add(l.kind + '|' + l.student_id + '|' + l.session_id));
+      (data || []).forEach((l) => { done.add(l.kind + '|' + l.student_id + '|' + l.session_id); if (l.link_url) gotLink.add(l.session_id + '|' + l.student_id + '|' + l.link_url); });
       if (!data || data.length < 1000) break;
     }
     const { data: links } = await admin.from('session_links').select('session_id, url');
@@ -69,7 +72,12 @@ module.exports = async (req, res) => {
         const r = await send.deliver(admin, kind, chunk.map((p) => ({ student_id: p.b.student_id, ...p.b.students, session: p.b.sessions, link: link[p.b.session_id], key: kind + '|' + p.b.student_id + '|' + p.b.session_id })));
         sent += r.sent; failed += r.failed;
         const logged = [];
-        chunk.forEach((p, k) => { if (r.results[k].ok) logged.push({ student_id: p.b.student_id, session_id: p.b.session_id, kind, channel: r.results[k].channel }); });
+        chunk.forEach((p, k) => {
+          if (!r.results[k].ok) return;
+          const url = link[p.b.session_id] || null;
+          logged.push({ student_id: p.b.student_id, session_id: p.b.session_id, kind, channel: r.results[k].channel, link_url: url });
+          if (url) gotLink.add(p.b.session_id + '|' + p.b.student_id + '|' + url);
+        });
         if (logged.length) await admin.from('email_log').upsert(logged, { onConflict: 'student_id,session_id,kind', ignoreDuplicates: true });
         await sleep(600);
       }
@@ -84,6 +92,26 @@ module.exports = async (req, res) => {
         const p = await queue.processBatch(admin, bc.id);
         if (!p || p.status === 'done') { resumed++; break; }
         await sleep(600);
+      }
+    }
+
+    // Joining link for students who joined a session after its link was broadcast and never got it.
+    let linksSent = 0, linksLeft = 0;
+    const { data: bcs } = await admin.from('session_broadcasts').select('session_id, url');
+    const broadcastNow = new Set((bcs || []).filter((x) => link[x.session_id]).map((x) => x.session_id));
+    if (broadcastNow.size) {
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await admin.from('email_queue').select('student_id, session_broadcasts!inner(session_id, url)').eq('status', 'sent').order('id').range(from, from + 999);
+        if (error) throw error;
+        (data || []).forEach((q) => { const b = q.session_broadcasts; if (b && b.url) gotLink.add(b.session_id + '|' + q.student_id + '|' + b.url); });
+        if (!data || data.length < 1000) break;
+      }
+      const lacking = bookings.filter((b) => b.students && b.sessions && broadcastNow.has(b.session_id) && new Date(b.sessions.ends_at) > now &&
+        !gotLink.has(b.session_id + '|' + b.student_id + '|' + link[b.session_id]));
+      for (let i = 0; i < lacking.length; i++) {
+        if (Date.now() - started > BUDGET_MS) { linksLeft = lacking.length - i; break; }
+        const b = lacking[i];
+        if (await linkMail.sendLink(admin, { student_id: b.student_id, ...b.students }, b.sessions, link[b.session_id])) linksSent++;
       }
     }
 
@@ -114,7 +142,7 @@ module.exports = async (req, res) => {
 
     const { data: tmr } = await admin.from('sessions').select('id').gte('starts_at', tomorrow.from).lt('starts_at', tomorrow.to);
     const missing = (tmr || []).map((s) => s.id).filter((id) => !link[id]);
-    return res.status(200).json({ ok: true, sent, failed, remaining, broadcastsFinished: resumed, welcomed, welcomeRemaining: welcomeLeft, sessionsMissingLink: missing });
+    return res.status(200).json({ ok: true, sent, failed, remaining, broadcastsFinished: resumed, linksSent, linksRemaining: linksLeft, welcomed, welcomeRemaining: welcomeLeft, sessionsMissingLink: missing });
   } catch (e) {
     return res.status(500).json({ error: (e && e.message) || 'Something went wrong.' });
   }

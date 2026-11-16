@@ -7,7 +7,7 @@
 //     so a session can never be overfilled, even while students are booking it at the same moment;
 //   - no clash with the student's GRASAG seat.
 // Each newly booked student is emailed straight away (with the joining link if it is already set).
-// The email is logged as their booking confirmation, so the daily job does not send another one;
+// The email is logged as their booking confirmation (with the link it carried), so the daily job does not send another;
 // if the email fails the log entry is removed and the daily job retries it.
 const { bad, bodyOf, requireStaff } = require('./_lib');
 const send = require('./_send');
@@ -83,25 +83,23 @@ module.exports = async (req, res) => {
     }
     const booked = todo.filter((x) => won.has(x.user_id));
 
-    // Email them (claim the confirmation slot first so nobody gets it twice).
+    // Email every newly booked student (a staff placement is new information, even for someone who once had this
+    // session). The confirmation slot is claimed too, so the daily job never sends a second confirmation.
     let emailed = 0, emailFailed = 0;
     if (booked.length) {
-      const { data: claimed } = await admin.from('email_log')
-        .upsert(booked.map((x) => ({ student_id: x.user_id, session_id: sid, kind: 'confirm' })), { onConflict: 'student_id,session_id,kind', ignoreDuplicates: true })
-        .select('student_id');
-      const mine = new Set((claimed || []).map((r) => r.student_id));
-      const items = booked.filter((x) => mine.has(x.user_id));
-      if (items.length) {
-        const { data: lk } = await admin.from('session_links').select('url').eq('session_id', sid).maybeSingle();
-        const r = await send.deliver(admin, 'assigned', items.map((x) => ({
-          student_id: x.user_id, name: x.name, email: x.email, email_status: x.email_status,
-          session: s, link: lk && lk.url, key: 'confirm|' + x.user_id + '|' + sid })));
-        const okIds = [], failIds = [];
-        items.forEach((x, k) => (r.results[k].ok ? okIds : failIds).push(x.user_id));
-        emailed = okIds.length; emailFailed = failIds.length;
-        if (okIds.length) await admin.from('email_log').update({ channel: 'email' }).eq('session_id', sid).eq('kind', 'confirm').in('student_id', okIds);
-        if (failIds.length) await admin.from('email_log').delete().eq('session_id', sid).eq('kind', 'confirm').in('student_id', failIds); // daily job retries
-      }
+      await admin.from('email_log')
+        .upsert(booked.map((x) => ({ student_id: x.user_id, session_id: sid, kind: 'confirm' })), { onConflict: 'student_id,session_id,kind', ignoreDuplicates: true });
+      const { data: lk } = await admin.from('session_links').select('url').eq('session_id', sid).maybeSingle();
+      const url = (lk && lk.url) || null, stamp = Date.now();
+      const r = await send.deliver(admin, 'assigned', booked.map((x) => ({
+        student_id: x.user_id, name: x.name, email: x.email, email_status: x.email_status,
+        session: s, link: url, key: 'assigned|' + x.user_id + '|' + sid + '|' + stamp })));
+      const okIds = [], failIds = [];
+      booked.forEach((x, k) => (r.results[k].ok ? okIds : failIds).push(x.user_id));
+      emailed = okIds.length; emailFailed = failIds.length;
+      if (okIds.length) await admin.from('email_log').update({ channel: 'email', link_url: url }).eq('session_id', sid).eq('kind', 'confirm').in('student_id', okIds);
+      // Failed: remove the confirmation entry only if it is still unsent (no channel), so the daily job retries it.
+      if (failIds.length) await admin.from('email_log').delete().eq('session_id', sid).eq('kind', 'confirm').is('channel', null).in('student_id', failIds);
     }
 
     const { data: after } = await admin.from('sessions').select('capacity, booked').eq('id', sid).maybeSingle();

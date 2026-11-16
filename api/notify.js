@@ -1,10 +1,12 @@
 // Called by the website for the signed-in student. Body {kind}:
 //   "welcome"  a short thank-you message, sent once, right after the account is created
-//   "confirm"  (default) a booking confirmation per booked session, with the join link if staff have set one
+//   "confirm"  (default) a booking confirmation per booked session, with the join link if staff have set one;
+//              and the join link for a session the student joined after its link was broadcast (see _links.js)
 // Sent by email (see _send.js).
 // Safe to call repeatedly: each message is sent only once.
 const { bodyOf, requireUser, limit, tooMany } = require('./_lib');
 const send = require('./_send');
+const links = require('./_links');
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -32,13 +34,22 @@ module.exports = async (req, res) => {
   let sent = 0;
   for (const b of bks || []) {
     const s = b.sessions; if (!s) continue;
-    // Claim the "confirm" slot first; if it already exists nothing comes back and we skip (no duplicate).
-    const { data: claimed } = await admin.from('email_log').upsert({ student_id: user.id, session_id: s.id, kind: 'confirm' }, { onConflict: 'student_id,session_id,kind', ignoreDuplicates: true }).select();
-    if (!claimed || !claimed.length) continue;
     const { data: lk } = await admin.from('session_links').select('url').eq('session_id', s.id).maybeSingle();
-    const r = await send.deliver(admin, 'confirm', [{ ...who, session: s, link: lk && lk.url, key: 'confirm|' + user.id + '|' + s.id }]);
-    if (r.sent) { sent++; await admin.from('email_log').update({ channel: r.results[0].channel }).match({ student_id: user.id, session_id: s.id, kind: 'confirm' }); }
-    else await admin.from('email_log').delete().match({ student_id: user.id, session_id: s.id, kind: 'confirm' }); // let a later call retry
+    const url = (lk && lk.url) || null;
+    // Claim the "confirm" slot first; if it already exists nothing comes back (no duplicate confirmation).
+    const { data: claimed } = await admin.from('email_log').upsert({ student_id: user.id, session_id: s.id, kind: 'confirm' }, { onConflict: 'student_id,session_id,kind', ignoreDuplicates: true }).select();
+    if (claimed && claimed.length) {
+      const r = await send.deliver(admin, 'confirm', [{ ...who, session: s, link: url, key: 'confirm|' + user.id + '|' + s.id }]);
+      if (r.sent) { sent++; await admin.from('email_log').update({ channel: r.results[0].channel, link_url: url }).match({ student_id: user.id, session_id: s.id, kind: 'confirm' }); }
+      else await admin.from('email_log').delete().match({ student_id: user.id, session_id: s.id, kind: 'confirm' }); // let a later call retry
+      continue;
+    }
+    // Already confirmed for this session earlier (for example they left it and came back). If the link has since been
+    // broadcast and this student never got it, send it now, once.
+    if (url && await links.needsLink(admin, user.id, s.id, url)) {
+      const r = await links.sendLink(admin, who, s, url);
+      if (r) sent++;
+    }
   }
   return res.status(200).json({ ok: true, sent });
 };

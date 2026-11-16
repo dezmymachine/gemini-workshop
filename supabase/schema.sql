@@ -286,8 +286,9 @@ create table public.session_links (
 create table public.email_log (
   student_id uuid not null references public.students(user_id) on delete cascade,
   session_id text not null references public.sessions(id) on delete cascade,
-  kind       text not null check (kind in ('confirm', 'reminder')),
+  kind       text not null check (kind in ('confirm', 'reminder', 'link')),   -- link: joining link for someone who joined after the broadcast
   channel    text check (channel in ('email', 'sms')),   -- how the message reached the student
+  link_url   text,                                       -- the joining link this message carried (null = none)
   sent_at    timestamptz not null default now(),
   primary key (student_id, session_id, kind)
 );
@@ -330,6 +331,7 @@ create table public.email_queue (
   sent_at      timestamptz
 );
 create index email_queue_progress_idx on public.email_queue(broadcast_id, status);
+create index email_queue_student_idx on public.email_queue(student_id);
 alter table public.email_queue enable row level security;   -- no policies: only the server can touch it
 
 -- Takes the next batch of waiting emails for a broadcast. "skip locked" means two senders running at the
