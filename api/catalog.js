@@ -9,7 +9,7 @@ module.exports = async (req, res) => {
   if (!admin) { res.setHeader('Cache-Control', 'no-store'); return res.status(500).json({ error: 'The server is missing its Supabase settings.' }); }
   try {
     const [s, c] = await Promise.all([
-      admin.from('sessions').select('id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at').order('starts_at', { ascending: true }),
+      admin.from('sessions').select('id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at,closed').order('starts_at', { ascending: true }),
       admin.rpc('session_counts')
     ]);
     if (s.error) throw s.error;

@@ -1,7 +1,7 @@
 // Staff (super admins and organisers) give a college session to students who have not booked one.
 // POST { session_id, students: [student numbers, up to 100] }
 // Same rules as a student booking (book_session in the database):
-//   - only sessions for the student's own college, not GRASAG, not already started;
+//   - only sessions for the student's own college, not GRASAG, not already started, not closed;
 //   - a student who already has a college seat is never moved (insert ... on conflict do nothing);
 //   - the seat limit is enforced by the database (sessions.booked <= capacity, kept by the bookings trigger),
 //     so a session can never be overfilled, even while students are booking it at the same moment;
@@ -26,11 +26,12 @@ module.exports = async (req, res) => {
   if (nums.length > MAX) return bad(res, 400, 'Send at most ' + MAX + ' students at a time.');
 
   try {
-    const { data: s, error: e1 } = await admin.from('sessions').select('id, track, title, grasag, capacity, booked, starts_at, ends_at').eq('id', sid).maybeSingle();
+    const { data: s, error: e1 } = await admin.from('sessions').select('id, track, title, grasag, capacity, booked, starts_at, ends_at, closed').eq('id', sid).maybeSingle();
     if (e1) throw e1;
     if (!s) return bad(res, 400, 'Unknown session.');
     if (s.grasag) return bad(res, 400, 'GRASAG sessions cannot be given out here.');
     if (new Date(s.starts_at) <= new Date()) return bad(res, 400, 'That session has already started.');
+    if (s.closed) return bad(res, 400, 'That session is closed to new bookings. Reopen it first or choose another session.');
 
     const skipped = [], byKey = new Map();
     nums.forEach((n) => { if (!byKey.has(keyOf(n))) byKey.set(keyOf(n), n); });

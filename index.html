@@ -384,7 +384,8 @@ async function loadSessions(sb){
   var rows=null;
   try{ var cr=await fetchRetry("/api/catalog",{},3); if(cr.ok){ var cj=await cr.json(); if(cj.sessions && cj.sessions.length){ rows=cj.sessions; st.counts=cj.counts||{}; st.caps=cj.capacity||{}; } } }catch(e){}
   if(!rows){
-    var r=await sb.from("sessions").select("id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at").order("starts_at",{ascending:true});
+    var r=await sb.from("sessions").select("id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at,closed").order("starts_at",{ascending:true});
+    if(r.error && /closed/.test(r.error.message||"")) r=await sb.from("sessions").select("id,track,day_key,slot,title,grasag,capacity,starts_at,ends_at").order("starts_at",{ascending:true});
     if(r.error) throw r.error;
     rows=r.data;
   }
@@ -393,7 +394,7 @@ async function loadSessions(sb){
     var a=Date.parse(x.starts_at), b=Date.parse(x.ends_at);
     if(!TRACKS[x.track]) TRACKS[x.track]={name:x.track,code:x.track,label:x.track,hue:"#4285F4"};   /* a track added in the database still shows up */
     TRACKS[x.track].day=x.day_key; if(x.grasag) TRACKS[x.track].g=true;
-    return {id:x.id, track:x.track, slot:x.slot, day:x.day_key, g:!!x.grasag, time:timeRange(a,b), title:x.title, start:a, end:b, cap:x.capacity};
+    return {id:x.id, track:x.track, slot:x.slot, day:x.day_key, g:!!x.grasag, time:timeRange(a,b), title:x.title, start:a, end:b, cap:x.capacity, closed:!!x.closed};
   });
   list.sort(function(a,b){ return a.start-b.start || (a.g-b.g) || (a.track<b.track?-1:1); });
   SESSIONS=list; BY_ID={}; DAYS={}; DAY_ORDER=[]; SLOT_LABEL={};
@@ -419,7 +420,7 @@ var st = {
   mode:"connecting", portal:"student", view:"dash", counts:{}, seats:{}, admin:false, q:"", myCol:"", myPG:false, pickCol:"", pickPG:"",
   fDay:"all", fCol:"all", pick:null, form:BLANK(), booking:null, busy:false, msg:null, sheetMsg:null,
   confirmDrop:null, h:"", staff:null, sh:"", staffList:null, staffForm:null, ready:false,
-  auth:{fg:{email:""}, np:{pw:""}, tab:"in", step:1, in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, msg:null, busy:false}, find:{index:"",email:""}, adminSession:null, rq:"", pg:{}, links:{}, lastBc:{}, linkDraft:{}, confirmBroadcast:null, bcRun:null, fs:{day:"all",track:"all",status:"all"}, fr:{college:"all",level:"all",session:"all"}, live:"off", updatedAt:null, refreshing:false, people:[], unbooked:[], adminQ:"", rep:{college:"all"}, asg:{sel:{}, open:{}, pick:{}, ask:null, run:null, res:null},
+  auth:{fg:{email:""}, np:{pw:""}, tab:"in", step:1, in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, msg:null, busy:false}, find:{index:"",email:""}, adminSession:null, rq:"", pg:{}, links:{}, lastBc:{}, linkDraft:{}, confirmBroadcast:null, confirmClose:null, bcRun:null, fs:{day:"all",track:"all",status:"all"}, fr:{college:"all",level:"all",session:"all"}, live:"off", updatedAt:null, refreshing:false, people:[], unbooked:[], adminQ:"", rep:{college:"all"}, asg:{sel:{}, open:{}, pick:{}, ask:null, run:null, res:null},
 };
 var API=null;
 function BLANKUP(){ return {name:"",index:"",email:"",phone:"",college:"",level:"",programme:"",pw:""}; }
@@ -451,6 +452,12 @@ async function fetchRetry(url,opts,tries){
 function count(sid){ return st.counts[sid]||0; }
 function cap(sid){ return (st.caps && st.caps[sid]) || (BY_ID[sid] && BY_ID[sid].cap) || CAP; }
 function left(sid){ return Math.max(0, cap(sid)-count(sid)); }
+/* Closed by staff: nobody new can book it (the database enforces this); people already booked keep their seat. */
+function isClosed(sid){ return !!(BY_ID[sid] && BY_ID[sid].closed); }
+function canBookInto(sid){ return !isClosed(sid) && left(sid)>0; }
+/* closedPin: a change staff just made wins for 60 s over a cached catalog that may not show it yet. */
+var closedPin={};
+function setClosedFlags(map){ var now=Date.now(); SESSIONS.forEach(function(s){ var p=closedPin[s.id]; s.closed = p && p.until>now ? p.val : !!map[s.id]; }); }
 function recountFromSeats(){ var c={}; Object.keys(st.seats).forEach(function(sid){ var seats=st.seats[sid]||{}; c[sid]=Object.keys(seats).filter(function(k){return !!seats[k];}).length; }); st.counts=c; }
 function shardOf(key){ var h=0; for(var i=0;i<key.length;i++){ h=(h*31+key.charCodeAt(i))>>>0; } return "s"+(h%64); }
 function sessLabel(sid){ var s=BY_ID[sid]; return s ? TRACKS[s.track].code+" · "+s.title : ""; }
@@ -486,6 +493,7 @@ function supaAPI(sb){
   function friendly(e){
     var m=(e&&e.message)||String(e||"");
     if(/SESSION_FULL/.test(m)) return userErr("That session has just filled up. Please choose another session.");
+    if(/SESSION_CLOSED/.test(m)){ var ce=userErr("That session is closed to new bookings. Please choose another session."); ce.closed=true; return ce; }
     if(/CLASH/.test(m)) return userErr("This clashes with your other session. Pick a different time.");
     if(/NOT_POSTGRAD/.test(m)) return userErr("GRASAG sessions are for postgraduate students only.");
     if(/WRONG_COLLEGE/.test(m)) return userErr("This session is not for your college.");
@@ -528,8 +536,11 @@ function supaAPI(sb){
       var c={}, k={};
       var cj=null;
       if(!fresh){ try{ var cr=await fetchRetry("/api/catalog",{},2); if(cr.ok) cj=await cr.json(); }catch(e){} }
-      if(cj && cj.counts){ c=cj.counts; k=cj.capacity||{}; }
-      else { var rows=await rpc("session_counts"); (rows||[]).forEach(function(x){ c[x.session_id]=+x.booked; k[x.session_id]=+x.capacity; }); }
+      if(cj && cj.counts){ c=cj.counts; k=cj.capacity||{}; if(cj.sessions){ var cm={}; cj.sessions.forEach(function(x){ if(x.closed) cm[x.id]=1; }); setClosedFlags(cm); } }
+      else {
+        var rows=await rpc("session_counts"); (rows||[]).forEach(function(x){ c[x.session_id]=+x.booked; k[x.session_id]=+x.capacity; });
+        try{ var cr2=await sb.from("sessions").select("id,closed"); if(!cr2.error){ var cm2={}; (cr2.data||[]).forEach(function(x){ if(x.closed) cm2[x.id]=1; }); setClosedFlags(cm2); } }catch(e){}
+      }
       st.counts=c; st.caps=k; render(); return true;
     }catch(e){ return false; }
   }
@@ -611,6 +622,7 @@ function supaAPI(sb){
     staffSessions: function(){ return staffApi({action:"list"},"/api/sessions"); },
     setLink: function(sid,url){ return staffApi({action:"setLink",session_id:sid,url:url},"/api/sessions"); },
     assign: function(sid,nums){ return staffApi({session_id:sid,students:nums},"/api/assign"); },
+    setClosed: function(sid,closed){ return staffApi({action:"setClosed",session_id:sid,closed:!!closed},"/api/sessions"); },
     broadcastStart: function(sid){ return staffApi({action:"start",session_id:sid},"/api/broadcast"); },
     broadcastProcess: function(id){ return staffApi({action:"process",id:id},"/api/broadcast"); },
     broadcastRetry: function(id){ return staffApi({action:"retry",id:id},"/api/broadcast"); },
@@ -634,6 +646,7 @@ function bannerHTML(s){
 function seatPill(sid){
   var l=left(sid);
   if(mine(sid)) return '<span class="pill">Booked</span>';
+  if(isClosed(sid)) return '<span class="pill plain">Closed</span>';
   if(l===0) return '<span class="pill full">Full</span>';
   return '<span class="pill'+(l<=40?' warn':'')+'"><span class="mono">'+l+'</span> seats left</span>';
 }
@@ -647,6 +660,7 @@ function metaRow(s){
 function audience(s){ return s.g ? 'For postgraduate students (GRASAG)' : 'For '+TRACKS[s.track].label+' students'; }
 function bookState(s){
   if(mine(s.id)) return {label:"Booked", dis:true, ok:true};
+  if(s.closed) return {label:"Closed", dis:true, closed:true};
   if(left(s.id)===0) return {label:"Session full", dis:true, full:true};
   var b=st.booking;
   if(b && !s.g && collegesFor(s.track).every(function(c){return c.id!==b.c;})) return {label:"Other college", dis:true};
@@ -658,6 +672,7 @@ function hcardHTML(s){
   return '<article class="hcard">'+bannerHTML(s)+'<div class="hbody"><div class="htop"><div style="display:grid;gap:6px;min-width:0"><span class="tag'+(s.g?' g':'')+'">'+esc(s.g?'GRASAG · Postgraduate':t.label)+'</span><h3>'+esc(s.title)+'</h3></div>'+seatPill(s.id)+'</div>'+
     metaRow(s)+'<span class="muted" style="font-size:15px">'+ICON.user.replace('aria-hidden','style="vertical-align:-3px;margin-right:6px" aria-hidden')+esc(audience(s))+'</span>'+
     (bs.full?'<div class="notice err" style="padding:10px 12px">All '+cap(s.id)+' seats in this session are taken. Please choose another session.</div>':'')+
+    (bs.closed?'<div class="notice" style="padding:10px 12px">This session is closed to new bookings. Please choose another session.</div>':'')+
     '<div class="hfoot">'+meterHTML(s.id)+(bs.ok?'<button class="btn sm" data-act="toMine">View booking</button>':'<button class="btn primary" data-act="book" data-sid="'+s.id+'"'+(bs.dis?' disabled':'')+'>'+esc(bs.label)+'</button>')+'</div></div></article>';
 }
 function modeNotice(){
@@ -724,7 +739,7 @@ function renderNav(){
 /* ---------- Views ---------- */
 function renderDash(){
   var b=st.booking;
-  var vis=visible(); var open=vis.filter(function(s){return left(s.id)>0;}).length;
+  var vis=visible(); var open=vis.filter(function(s){return canBookInto(s.id);}).length;
   var upcoming=myIds().filter(function(id){ return startOf(BY_ID[id])>Date.now(); }).length;
   var next=myIds().map(function(id){return BY_ID[id];}).sort(function(a,c){return startOf(a)-startOf(c);})[0];
   var target = next ? startOf(next) : FIRST_START;
@@ -747,7 +762,7 @@ function renderDash(){
   var col=list.filter(function(s){return !s.g;}), gr=list.filter(function(s){return s.g;});
   if(!list.length) h+='<div class="empty">No sessions match your search.</div>';
   var colAll=vis.filter(function(s){return !s.g;});
-  if(st.booking && !st.booking.s && colAll.length && colAll.every(function(s){return left(s.id)===0;})) h+='<div class="notice err" role="alert">All sessions for your college are full. Please contact the workshop organisers. They can tell you if a seat opens up.</div>';
+  if(st.booking && !st.booking.s && colAll.length && colAll.every(function(s){return !canBookInto(s.id);})) h+='<div class="notice err" role="alert">All sessions for your college are full or closed. Please contact the workshop organisers. They can tell you if a seat opens up.</div>';
   if(col.length) h+='<div class="list">'+col.map(hcardHTML).join("")+'</div>';
   if(gr.length) h+='<div class="sec-head" style="margin-top:8px"><div><h2>GRASAG sessions</h2><p>One dedicated postgraduate session on Tuesday, Wednesday and Thursday. You can book one in addition to your college session.</p></div></div><div class="list">'+gr.map(hcardHTML).join("")+'</div>';
   return h+'</section>';
@@ -845,8 +860,9 @@ function filterSessions(list){
   return list.filter(function(s){
     if(f.day!=="all" && s.day!==f.day) return false;
     if(f.track!=="all" && s.track!==f.track) return false;
-    if(f.status==="open" && left(s.id)===0) return false;
+    if(f.status==="open" && !canBookInto(s.id)) return false;
     if(f.status==="full" && left(s.id)>0) return false;
+    if(f.status==="closed" && !s.closed) return false;
     if(!coord && f.status==="nolink" && st.links[s.id]) return false;
     if(!coord && f.status==="haslink" && !st.links[s.id]) return false;
     return true;
@@ -855,7 +871,7 @@ function filterSessions(list){
 function fsBar(sess){
   var coord=st.staff && st.staff.role==="coord", seen={}, tracks=[["all","All colleges / tracks"]];
   sess.forEach(function(s){ if(!seen[s.track]){ seen[s.track]=1; tracks.push([s.track, TRACKS[s.track].code+(s.g?" · "+DAYS[s.day].short:"")]); } });
-  var status=[["all","Any status"],["open","Open"],["full","Full"]]; if(!coord) status.push(["nolink","No link yet"],["haslink","Link set"]);
+  var status=[["all","Any status"],["open","Open for booking"],["full","Full"],["closed","Closed"]]; if(!coord) status.push(["nolink","No link yet"],["haslink","Link set"]);
   return '<div class="fbar" role="group" aria-label="Filter sessions">'+
     selHTML("fs.day","Day",[["all","All days"]].concat(DAY_ORDER.map(function(d){ return [d,DAYS[d].short]; })),st.fs.day)+
     selHTML("fs.track","College / track",tracks,st.fs.track)+selHTML("fs.status","Status",status,st.fs.status)+
@@ -922,12 +938,28 @@ function renderAdmin(){
   h+='<div class="sched panel" style="padding:0"><table class="admin-table"><thead><tr><th>Day</th><th>Track</th><th>Session</th><th class="num">'+(role==="coord"?'Your students':'Booked')+'</th><th class="num">Seats left</th>'+(role==="coord"?'':'<th>Link</th>')+'<th></th></tr></thead><tbody>';
   sp.items.forEach(function(s){
     var l=left(s.id);
-    h+='<tr class="rowlink" data-act="openSession" data-sid="'+s.id+'"><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+'</td><td class="num mono">'+(role==="coord"?(by[s.id]||0):count(s.id))+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
+    h+='<tr class="rowlink" data-act="openSession" data-sid="'+s.id+'"><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+(s.closed?' <span class="pill plain">Closed</span>':'')+'</td><td class="num mono">'+(role==="coord"?(by[s.id]||0):count(s.id))+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
       (role==="coord"?'':'<td>'+(st.links&&st.links[s.id]?'<span class="pill">Link set</span>':'<span class="pill plain">No link</span>')+'</td>')+
       '<td><a class="linkbtn" href="/staff?session='+encodeURIComponent(s.id)+'" data-act="openSession" data-sid="'+s.id+'">View list</a></td></tr>';
   });
   if(!sp.items.length) h+='<tr><td colspan="'+(role==="coord"?6:7)+'"><div class="empty" style="border:0">No sessions match these filters.</div></td></tr>';
   return h+'</tbody></table>'+pagerHTML("sessions",sp)+'</div>';
+}
+/* Close / reopen a session to new bookings (super admins and organisers). */
+function closePanel(sid){
+  var s=BY_ID[sid], ask=st.confirmClose===sid, busy=st.busy;
+  var h='<div class="panel" style="display:grid;gap:10px"><div style="display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between"><h3>Bookings</h3><span class="pill'+(s.closed?' plain':'')+'">'+(s.closed?'Closed to new bookings':'Open for booking')+'</span></div>';
+  if(ask) h+='<div class="notice" style="display:grid;gap:8px"><strong>Close '+esc(longLabel(s))+'?</strong><span style="font-size:14px">Students already booked keep their seat, link and reminders. Nobody new can book or switch into it until you reopen it.</span><div class="btns"><button type="button" class="btn primary sm" data-act="doClose" data-sid="'+esc(sid)+'"'+(busy?' disabled':'')+'>Yes, close it</button><button type="button" class="btn sm" data-act="noClose">Cancel</button></div></div>';
+  else h+='<p class="muted" style="margin:0;font-size:14px">'+(s.closed?'Students cannot book or switch into this session. Students already booked keep their seat and can still change or cancel.':'Close this session to stop new bookings and steer students to other sessions. Students already booked keep their seat.')+'</p>'+
+    '<div class="btns">'+(s.closed?'<button type="button" class="btn" data-act="doReopen" data-sid="'+esc(sid)+'"'+(busy?' disabled':'')+'>'+(busy?'Saving…':'Reopen for booking')+'</button>':'<button type="button" class="btn" data-act="askClose" data-sid="'+esc(sid)+'"'+(busy?' disabled':'')+'>Close this session</button>')+'</div>';
+  return h+'</div>';
+}
+async function setSessionClosed(sid,closed){
+  if(st.busy) return;
+  st.busy=true; st.msg=null; render();
+  try{ var r=await API.setClosed(sid,closed); BY_ID[sid].closed=!!r.closed; closedPin[sid]={val:!!r.closed, until:Date.now()+60000}; st.confirmClose=null; st.msg={text:r.closed?"Session closed. Nobody new can book it; students already booked keep their seat.":"Session reopened. Students can book it again."}; }
+  catch(err){ st.msg={err:true,text:err.message}; }
+  st.busy=false; render(); window.scrollTo(0,0);
 }
 function linkPanel(sid,rows){
   var cur=(st.links||{})[sid]||"", draft=st.linkDraft[sid]!=null?st.linkDraft[sid]:cur, last=(st.lastBc||{})[sid], n=rows.length;
@@ -1023,8 +1055,8 @@ function renderSessionPage(sid){
     '<div class="sec-head"><div><h2>'+esc(t.code)+' · '+esc(s.title)+'</h2><p>'+esc(DAYS[s.day].date)+', '+esc(s.time)+' (Ghana time). '+esc(t.label)+'.</p></div></div>'+
     '<section class="stats" aria-label="Summary"><div class="stat"><span class="ic a">'+ICON.users.replace(/width="18" height="18"/,'width="20" height="20"')+'</span><span class="lb">'+(role==="coord"?'Your students booked':'Students booked')+'</span><span class="vl">'+rows.length+'</span></div>'+
     '<div class="stat"><span class="ic">'+ICON.seat+'</span><span class="lb">Seats left</span><span class="vl">'+l+'</span><span class="sub">of '+cap(sid)+' seats</span></div>'+
-    '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Status</span><span class="vl" style="font-size:24px">'+(l===0?'Full':'Open')+'</span></div></section>'+
-    (role==="coord"?'':linkPanel(sid,rows))+
+    '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Status</span><span class="vl" style="font-size:24px">'+(s.closed?'Closed':l===0?'Full':'Open')+'</span>'+(s.closed?'<span class="sub">to new bookings</span>':'')+'</div></section>'+
+    (role==="coord"?'':closePanel(sid)+linkPanel(sid,rows))+
     '<div class="toolbar"><div class="field"><label for="rQ">Search this list</label><input id="rQ" type="search" value="'+esc(st.rq||"")+'" placeholder="Name, student number, email, phone or programme"></div>'+
     (API && API.canDownload && rows.length?'<div class="btns"><button class="btn" data-act="csvSession">Download this list (CSV)</button></div>':'')+'</div>'+
     (rows.length?frBar(shown,false):'')+
@@ -1033,7 +1065,7 @@ function renderSessionPage(sid){
 }
 /* ---------- Give a session to students who have not booked (super admins and organisers) ---------- */
 function canAssign(){ return !!(st.staff && st.staff.role!=="coord" && API && API.assign); }
-function openForAssign(s){ return !s.g && s.start>Date.now() && left(s.id)>0; }
+function openForAssign(s){ return !s.g && !s.closed && s.start>Date.now() && left(s.id)>0; }
 function collegeSessions(cid){ var t=trackOf(cid); return SESSIONS.filter(function(s){ return !s.g && s.track===t; }); }
 /* The session chosen in a college's card: what staff picked, else the open one with the most seats left. */
 function cardPick(cid){
@@ -1071,7 +1103,7 @@ function collegeCard(cid,rows){
   var ticked=rows.filter(function(r){ return sel[normIndex(r.i)]; }).length, n=ticked||rows.length, who=ticked?n+" ticked":"all "+n;
   var sess=collegeSessions(cid), pick=cardPick(cid), anyOpen=sess.some(openForAssign);
   var h='<section class="panel ccard" aria-label="'+esc(collegeName(cid))+'"><div class="ccard-h"><h3>'+esc(collegeName(cid))+'</h3><span class="pill full">'+rows.length+' not booked</span></div>';
-  h+='<div class="schips" aria-label="Sessions and seats left">'+sess.map(function(s){ var st0=s.start<=Date.now(), l=left(s.id); return '<span class="schip'+(st0||!l?' off':'')+'">'+esc(shortSess(s))+' · '+(st0?'started':l?l+' left':'full')+'</span>'; }).join("")+'</div>';
+  h+='<div class="schips" aria-label="Sessions and seats left">'+sess.map(function(s){ var st0=s.start<=Date.now(), l=left(s.id); return '<span class="schip'+(st0||!l||s.closed?' off':'')+'">'+esc(shortSess(s))+' · '+(st0?'started':s.closed?'closed':l?l+' left':'full')+'</span>'; }).join("")+'</div>';
   if(can){
     if(A.ask && A.ask.cid===cid) h+=askHTML();
     else if(busy && A.run.cid===cid) h+=runHTML();
@@ -1151,7 +1183,7 @@ function reportData(col){
   var sess=SESSIONS.filter(function(s){ return !t || s.track===t || s.g; });
   var inSess={}, perDay={};
   people.forEach(function(r){ [r.s,r.g].forEach(function(sid){ if(sid && BY_ID[sid]){ inSess[sid]=(inSess[sid]||0)+1; var d=BY_ID[sid].day; perDay[d]=(perDay[d]||0)+1; } }); });
-  var bySession=sess.map(function(s){ return {s:s, label:TRACKS[s.track].code+" · "+s.title, mine:inSess[s.id]||0, total:count(s.id), cap:cap(s.id), left:left(s.id)}; })
+  var bySession=sess.map(function(s){ return {s:s, label:TRACKS[s.track].code+" · "+s.title+(s.closed?" (closed)":""), mine:inSess[s.id]||0, total:count(s.id), cap:cap(s.id), left:left(s.id)}; })
     .filter(function(x){ return !x.s.g || col==="all" || x.mine>0; });   /* GRASAG sessions only when this college has postgraduates in them */
   var byDay=DAY_ORDER.map(function(d){ return {label:DAYS[d].date, n:perDay[d]||0}; }).filter(function(x){ return x.n>0 || col==="all"; });
   var yrs={}; people.forEach(function(r){ var y=r.l||""; var o=yrs[y]||(yrs[y]={label:yearLabel(y)||"Not stated", reg:0, bk:0}); o.reg++; if(r.s||r.g) o.bk++; });
@@ -1425,7 +1457,7 @@ async function loadAdmin(){
     var seats={}; d.rows.forEach(function(r){ [r.s,r.g].forEach(function(sid){ if(sid){ seats[sid]=seats[sid]||{}; seats[sid][normIndex(r.i)]=r; } }); });
     st.seats=seats; st.people=d.rows; st.unbooked=d.rows.filter(function(r){ return !r.s && !r.g; });
   }catch(err){ st.msg={err:true,text:err.message}; }
-  if(st.staff.role!=="coord" && API.staffSessions){ try{ var d2=await API.staffSessions(); st.links=d2.links||{}; st.lastBc=d2.last||{}; st.linksErr=""; }catch(err){ st.linksErr=err.message; } }
+  if(st.staff.role!=="coord" && API.staffSessions){ try{ var d2=await API.staffSessions(); st.links=d2.links||{}; st.lastBc=d2.last||{}; if(d2.closed) setClosedFlags(d2.closed); st.linksErr=""; }catch(err){ st.linksErr=err.message; } }
   st.updatedAt=new Date(); lastRoster=Date.now(); startLive();
 }
 /* ---------- Live updates (Supabase Realtime, with a polling fallback) ---------- */
@@ -1559,6 +1591,10 @@ document.addEventListener("click",async function(e){
     render(); window.scrollTo(0,0); return;
   }
   if(a==="askBroadcast"){ st.confirmBroadcast=b.dataset.sid; render(); return; }
+  if(a==="askClose"){ st.confirmClose=b.dataset.sid; render(); return; }
+  if(a==="noClose"){ st.confirmClose=null; render(); return; }
+  if(a==="doClose") return setSessionClosed(b.dataset.sid,true);
+  if(a==="doReopen") return setSessionClosed(b.dataset.sid,false);
   if(a==="noBroadcast"){ st.confirmBroadcast=null; render(); return; }
   if(a==="doBroadcast"||a==="resumeBroadcast"||a==="retryBroadcast"){
     var bsid=b.dataset.sid; if(st.bcRun) return;

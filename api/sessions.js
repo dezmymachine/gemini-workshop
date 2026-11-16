@@ -1,4 +1,4 @@
-// Meeting links for staff (super admins and organisers): list them and set or clear a session's link.
+// Session settings for staff (super admins and organisers): meeting links, and closing a session to new bookings.
 const { bad, bodyOf, requireStaff, validLink } = require('./_lib');
 
 module.exports = async (req, res) => {
@@ -15,7 +15,9 @@ module.exports = async (req, res) => {
       const last = {};
       (bc || []).forEach((r) => { if (!last[r.session_id]) last[r.session_id] = { id: r.id, at: r.sent_at, total: r.total, sent: r.sent, failed: r.failed, status: r.status, pending: Math.max(0, r.total - r.sent - r.failed) }; });
       const out = {}; (links || []).forEach((l) => { out[l.session_id] = l.url; });
-      return res.status(200).json({ links: out, last });
+      const { data: cl } = await admin.from('sessions').select('id').eq('closed', true);
+      const closed = {}; (cl || []).forEach((r) => { closed[r.id] = true; });
+      return res.status(200).json({ links: out, last, closed });
     }
 
     if (body.action === 'setLink') {
@@ -32,6 +34,14 @@ module.exports = async (req, res) => {
       const { error } = await admin.from('session_links').upsert({ session_id: sid, url, updated_at: new Date().toISOString() });
       if (error) throw error;
       return res.status(200).json({ ok: true, url });
+    }
+    if (body.action === 'setClosed') {
+      // Closed = nobody can book or switch into it (enforced in book_session). People already booked keep their seat.
+      const sid = String(body.session_id || ''), closed = body.closed === true;
+      const { data, error } = await admin.from('sessions').update({ closed }).eq('id', sid).select('id, closed');
+      if (error) throw error;
+      if (!data || !data.length) return bad(res, 400, 'Unknown session.');
+      return res.status(200).json({ ok: true, closed: data[0].closed });
     }
     return bad(res, 400, 'Unknown action.');
   } catch (e) {

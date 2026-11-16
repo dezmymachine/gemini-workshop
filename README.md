@@ -134,6 +134,9 @@ What the code already does to stay fast:
   page and get a reset link by email.
 - **Add the Google Meet link for a session:** Staff portal -> Registrations -> **View list** on the
   session -> **Meeting link**. Paste the link and click **Save link**. Super admins and organisers only.
+- **Close a session to new bookings:** on that session's page, **Bookings → Close this session** (super admins and organisers).
+  Nobody can book or switch into it until you press **Reopen for booking**; students already booked keep their seat, link and reminders
+  and can still change or cancel. The database enforces it (`book_session` raises `SESSION_CLOSED`, migration `008`).
 - **Send the link to everyone booked on a session:** on that session's page click
   **Send link to booked students** and confirm.
   You can press it again after changing a link.
@@ -175,7 +178,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://www.kecworkshops.com/api/re
 
 It returns `sent`, `failed`, `remaining` (confirmations/reminders left for the next run), `welcomed` and `welcomeRemaining`.
 
-Database: run the files in `supabase/migrations/` in order once (`002` to `007`); a brand-new project gets everything from `schema.sql`.
+Database: run the files in `supabase/migrations/` in order once (`002` to `008`); a brand-new project gets everything from `schema.sql`.
 The tables `email_queue` and `email_log` hold the messages. Phone numbers are still collected at registration (they appear in the CSV)
 but are no longer used for messages.
 

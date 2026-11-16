@@ -32,6 +32,7 @@ create table public.sessions (
   grasag    boolean not null default false,
   capacity  int  not null default 400 check (capacity > 0),
   booked    int  not null default 0,          -- kept up to date by a trigger on bookings
+  closed    boolean not null default false,   -- staff closed it to new bookings (people already booked keep their seat)
   starts_at timestamptz not null,
   ends_at   timestamptz not null,
   check (booked >= 0 and booked <= capacity),
@@ -200,6 +201,8 @@ begin
   if cur_sid = p_session then return; end if;
   perform 1 from sessions where id in (p_session, coalesce(cur_sid, p_session)) order by id for update;
   select * into ss from sessions where id = p_session;   -- fresh copy after the lock
+
+  if ss.closed then raise exception 'SESSION_CLOSED'; end if;
 
   if ss.grasag then
     if me.level not like 'Postgraduate%' then raise exception 'NOT_POSTGRAD'; end if;
