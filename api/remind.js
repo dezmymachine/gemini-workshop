@@ -1,7 +1,9 @@
 // Runs once a day (see vercel.json "crons"). Vercel calls it with "Authorization: Bearer <CRON_SECRET>".
 //  1. Sends a reminder to everyone booked on a session that happens tomorrow (Ghana time = UTC).
 //  2. Safety net: sends any booking confirmation that was missed (for example a student closed the tab).
-// Email or SMS per student, see _send.js.
+//  3. Finishes any link broadcast that was left half-sent.
+//  4. Safety net: sends the registration (welcome) email to students who have not booked and never got it.
+// Everything goes by email, see _send.js.
 // Reports sessions that still have no meeting link so staff can add one.
 const { adminClient } = require('./_lib');
 const send = require('./_send');
@@ -13,7 +15,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function allBookings(admin, filter) {
   const out = [];
   for (let from = 0; ; from += 1000) {
-    let q = admin.from('bookings').select('student_id, session_id, students(name, email, email_status, phone), sessions(id, track, title, grasag, starts_at, ends_at)').order('student_id').range(from, from + 999);
+    let q = admin.from('bookings').select('student_id, session_id, students(name, email, email_status), sessions(id, track, title, grasag, starts_at, ends_at)').order('student_id').range(from, from + 999);
     if (filter) q = filter(q);
     const { data, error } = await q; if (error) throw error;
     out.push(...(data || [])); if (!data || data.length < 1000) break;
@@ -48,7 +50,8 @@ module.exports = async (req, res) => {
     const link = {}; (links || []).forEach((l) => { link[l.session_id] = l.url; });
 
     const plan = []; // { kind, row }
-    (await allBookings(admin)).forEach((b) => {
+    const bookings = await allBookings(admin);
+    bookings.forEach((b) => {
       if (!b.students || !b.sessions) return;
       const key = (k) => k + '|' + b.student_id + '|' + b.session_id;
       const startsAt = b.sessions.starts_at;
@@ -63,7 +66,7 @@ module.exports = async (req, res) => {
       for (let i = 0; i < group.length; i += queue.BATCH) {
         if (Date.now() - started > BUDGET_MS) { remaining += group.length - i; break; }
         const chunk = group.slice(i, i + queue.BATCH);
-        const r = await send.deliver(admin, kind, chunk.map((p) => ({ student_id: p.b.student_id, ...p.b.students, session: p.b.sessions, link: link[p.b.session_id] })));
+        const r = await send.deliver(admin, kind, chunk.map((p) => ({ student_id: p.b.student_id, ...p.b.students, session: p.b.sessions, link: link[p.b.session_id], key: kind + '|' + p.b.student_id + '|' + p.b.session_id })));
         sent += r.sent; failed += r.failed;
         const logged = [];
         chunk.forEach((p, k) => { if (r.results[k].ok) logged.push({ student_id: p.b.student_id, session_id: p.b.session_id, kind, channel: r.results[k].channel }); });
@@ -84,9 +87,34 @@ module.exports = async (req, res) => {
       }
     }
 
+    // Registration emails that never went out (for example while messages were failing), for students who have not
+    // booked yet: it doubles as a nudge to choose a session. Booked students get their booking confirmation instead.
+    // Same claim as api/notify.js: only one sender can flip welcome_sent_at from null, so nobody gets it twice.
+    let welcomed = 0, welcomeLeft = 0;
+    const booked = new Set(bookings.map((b) => b.student_id)), waiting = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await admin.from('students').select('user_id').is('welcome_sent_at', null).order('user_id').range(from, from + 999);
+      if (error) throw error;
+      (data || []).forEach((r) => { if (!booked.has(r.user_id)) waiting.push(r.user_id); });
+      if (!data || data.length < 1000) break;
+    }
+    for (let i = 0; i < waiting.length; i += queue.BATCH) {
+      if (Date.now() - started > BUDGET_MS) { welcomeLeft = waiting.length - i; break; }
+      const { data: won, error } = await admin.from('students').update({ welcome_sent_at: new Date().toISOString() })
+        .in('user_id', waiting.slice(i, i + queue.BATCH)).is('welcome_sent_at', null).select('user_id, name, email, email_status');
+      if (error) throw error;
+      if (!won || !won.length) continue;
+      const r = await send.deliver(admin, 'welcome', won.map((s) => ({ student_id: s.user_id, name: s.name, email: s.email, email_status: s.email_status, key: 'welcome|' + s.user_id })));
+      welcomed += r.sent; failed += r.failed;
+      // Not sent but worth another try (rate limit, outage): give the claim back so the next run picks it up.
+      const retry = won.filter((s, k) => !r.results[k].ok && !r.results[k].unusable).map((s) => s.user_id);
+      if (retry.length) await admin.from('students').update({ welcome_sent_at: null }).in('user_id', retry);
+      await sleep(600);
+    }
+
     const { data: tmr } = await admin.from('sessions').select('id').gte('starts_at', tomorrow.from).lt('starts_at', tomorrow.to);
     const missing = (tmr || []).map((s) => s.id).filter((id) => !link[id]);
-    return res.status(200).json({ ok: true, sent, failed, remaining, broadcastsFinished: resumed, sessionsMissingLink: missing });
+    return res.status(200).json({ ok: true, sent, failed, remaining, broadcastsFinished: resumed, welcomed, welcomeRemaining: welcomeLeft, sessionsMissingLink: missing });
   } catch (e) {
     return res.status(500).json({ error: (e && e.message) || 'Something went wrong.' });
   }

@@ -1,75 +1,40 @@
-// Chooses email or SMS for each student and sends.
-// Students who registered with a public mailbox they read on their phone (Gmail, Yahoo, Outlook, iCloud…) get email.
-// Students who used a student or school address (most can't open it), or whose email bounced or was reported as
-// spam, get an SMS instead. EMAIL_DOMAINS (comma list) replaces the built-in list without a code change.
+// Sends student messages. Everything goes by email (see _mail.js).
+// A student is skipped ('none') only when the address is invalid or was marked bounced / reported as spam.
 const mail = require('./_mail');
-const sms = require('./_sms');
 
-const PUBLIC_DOMAINS = [
-  'gmail.com', 'googlemail.com',
-  'yahoo.com', 'yahoo.co.uk', 'ymail.com',
-  'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
-  'icloud.com', 'me.com',
-  'aol.com',
-  'proton.me', 'protonmail.com'
-];
-function emailDomains() {
-  const env = String(process.env.EMAIL_DOMAINS || '').split(',').map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean);
-  return env.length ? env : PUBLIC_DOMAINS;
-}
-function domainOf(email) { const e = mail.normalizeEmail(email); return e ? e.slice(e.lastIndexOf('@') + 1) : ''; }
-function isPublicMailbox(email) { const d = domainOf(email); return !!d && emailDomains().includes(d); }
+function configured() { return mail.configured(); }
 
-function configured() { return mail.configured() || sms.configured(); }
-
-// student: { email, email_status, phone }. Returns 'email', 'sms' or 'none'.
-// kind: while the temporary Resend setup is on, only some kinds may go by email (see _mail.js).
-function channelFor(student, kind) {
+// student: { email, email_status }. Returns 'email' or 'none'.
+function channelFor(student) {
   const okEmail = (student.email_status || 'ok') === 'ok' && !!mail.normalizeEmail(student.email);
-  const canMail = mail.configured(kind);
-  if (okEmail && canMail && isPublicMailbox(student.email)) return 'email';
-  if (sms.configured() && sms.normalizePhone(student.phone)) return 'sms';
-  if (okEmail && canMail) return 'email';   // no usable phone: the school inbox is better than nothing
-  return 'none';
+  return okEmail && mail.configured() ? 'email' : 'none';
 }
 
-// The same message in both forms. kind: welcome | confirm | reminder | broadcast.
+// The message for one student. kind: welcome | confirm | reminder | broadcast.
 function build(kind, it) {
-  if (kind === 'welcome') return { mail: mail.templates.welcome(it.name), text: sms.templates.welcome(it.name) };
-  if (kind === 'broadcast') return { mail: mail.templates.broadcast(it.name, it.session, it.link), text: sms.templates.broadcast(it.session, it.link) };
-  return { mail: mail.templates[kind](it.name, it.session, it.link), text: sms.templates[kind](it.name, it.session, it.link) };
+  if (kind === 'welcome') return mail.templates.welcome(it.name);
+  return mail.templates[kind](it.name, it.session, it.link);
 }
 
-// items: [{ student_id, name, email, email_status, phone, session, link }], all of one kind.
+// items: [{ student_id, name, email, email_status, session, link, key }], all of one kind.
+// key: a stable id per message (queue row, or kind|student|session) so a retried request never sends twice.
 // Returns { sent, failed, error, results: [{ ok, channel, unusable }] } in the same order as items.
-// An address SES refuses outright is marked bounced and that student is texted in the same call.
+// unusable = do not try this one again (no usable address, or the address was refused, which also marks it bounced).
 async function deliver(admin, kind, items) {
   const results = items.map(() => ({ ok: false, channel: 'none', unusable: true }));
-  const byMail = [], bySms = [];
-  items.forEach((it, i) => {
-    const ch = channelFor(it, kind);
-    results[i].channel = ch;
-    if (ch === 'email') byMail.push(i); else if (ch === 'sms') bySms.push(i);
-  });
+  const byMail = [];
+  items.forEach((it, i) => { if (channelFor(it) === 'email') byMail.push(i); });
   let error = '';
 
   if (byMail.length) {
-    const r = await mail.sendAll(byMail.map((i) => ({ email: items[i].email, ...build(kind, items[i]).mail })));
+    const r = await mail.sendAll(byMail.map((i) => ({ email: items[i].email, key: items[i].key, ...build(kind, items[i]) })));
     if (r.error) error = r.error;
     const marks = [];
     byMail.forEach((i, k) => {
-      if (!r.refused[k]) { results[i] = { ok: r.ok[k], channel: 'email', unusable: false }; return; }
-      results[i] = { ok: false, channel: 'email', unusable: true };
-      if (admin && items[i].student_id) marks.push(markBad(admin, items[i].student_id, 'bounced'));
-      if (sms.configured() && sms.normalizePhone(items[i].phone)) bySms.push(i);   // text them instead, right now
+      results[i] = { ok: r.ok[k], channel: 'email', unusable: !!r.refused[k] };
+      if (r.refused[k] && admin && items[i].student_id) marks.push(markBad(admin, items[i].student_id, 'bounced'));
     });
     await Promise.all(marks);
-  }
-
-  if (bySms.length) {
-    const r = await sms.sendAll(bySms.map((i) => ({ phone: items[i].phone, message: build(kind, items[i]).text })));
-    if (r.error) error = error || r.error;
-    bySms.forEach((i, k) => { results[i] = { ok: r.ok[k], channel: 'sms', unusable: !sms.normalizePhone(items[i].phone) }; });
   }
 
   const sent = results.filter((x) => x.ok).length;
@@ -80,4 +45,4 @@ function markBad(admin, studentId, status) {
   return admin.from('students').update({ email_status: status, email_bad_at: new Date().toISOString() }).eq('user_id', studentId).then(() => {}, () => {});
 }
 
-module.exports = { configured, channelFor, isPublicMailbox, domainOf, emailDomains, deliver, PUBLIC_DOMAINS };
+module.exports = { configured, channelFor, deliver };

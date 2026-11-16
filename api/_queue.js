@@ -1,9 +1,18 @@
 // Broadcast queue. Starting a broadcast only writes one row per student into email_queue (fast).
-// Each call to processBatch() then sends the next 50 waiting messages (email or SMS per student, see _send.js), so a big class is sent in layers and no
+// Each call to processBatch() then sends the next 100 waiting emails (one Resend batch request, see _mail.js), so a big class is sent in layers and no
 // single request runs long. The website keeps calling it until nothing is left; if the page is closed,
 // staff can press "Resume" and the daily job (api/remind.js) also finishes anything left over.
 const send = require('./_send');
-const BATCH = 50;   // about 5 s per call at 10 emails a second
+const BATCH = 100;   // = the Resend batch limit: one request per call
+
+// A row claimed on its 3rd (last) attempt by a call that then crashed stays 'sending' and can never be claimed again
+// (claim_email_batch needs attempts < 3), which would keep the broadcast "running" forever. Mark it failed so the
+// broadcast can finish; staff's "Retry" button puts failed rows back in the queue.
+async function sweepStuck(admin, id) {
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  await admin.from('email_queue').update({ status: 'failed', sent_at: null })
+    .eq('broadcast_id', id).eq('status', 'sending').gte('attempts', 3).lt('claimed_at', cutoff);
+}
 
 async function tally(admin, id) {
   const t = { pending: 0, sending: 0, sent: 0, failed: 0 };
@@ -35,20 +44,20 @@ async function processBatch(admin, id) {
     if (error) throw error;
     if (claimed && claimed.length) {
       const { data: s } = await admin.from('sessions').select('id, track, title, grasag, starts_at, ends_at').eq('id', bc.session_id).maybeSingle();
-      // Current email status (a bounce since queueing moves the student to SMS).
+      // Current email status (an address marked bounced since queueing is skipped).
       const ids = claimed.map((q) => q.student_id).filter(Boolean), status = {};
       if (ids.length) {
         const { data: st } = await admin.from('students').select('user_id, email_status').in('user_id', ids);
         (st || []).forEach((x) => { status[x.user_id] = x.email_status; });
       }
       const r = await send.deliver(admin, 'broadcast', claimed.map((q) => ({
-        student_id: q.student_id, name: q.name, email: q.to_email, email_status: status[q.student_id], phone: q.to_phone, session: s, link: bc.url
+        student_id: q.student_id, name: q.name, email: q.to_email, email_status: status[q.student_id], session: s, link: bc.url, key: 'q' + q.id
       })));
       const now = new Date().toISOString(), sent = [], retry = [], dead = [];
       claimed.forEach((q, i) => {
         const x = r.results[i];
         if (x.ok) sent.push(q.id);
-        else if (x.unusable || q.attempts >= 3) dead.push(q.id);   // unusable address/number: never retry
+        else if (x.unusable || q.attempts >= 3) dead.push(q.id);   // unusable address: never retry
         else retry.push(q.id);                                      // try again later, give up after 3 attempts
       });
       if (sent.length) await admin.from('email_queue').update({ status: 'sent', sent_at: now }).in('id', sent);
@@ -56,6 +65,7 @@ async function processBatch(admin, id) {
       if (dead.length) await admin.from('email_queue').update({ status: 'failed', sent_at: null }).in('id', dead);
     }
   }
+  await sweepStuck(admin, id);
   const t = await tally(admin, id), p = shape(bc, t);
   await admin.from('session_broadcasts').update({ sent: p.sent, failed: p.failed, status: p.status }).eq('id', id);
   return p;

@@ -1,6 +1,6 @@
 // Amazon SES tells us about bounces and spam complaints through an SNS topic that posts here:
 //   https://<site>/api/mail-events?key=<SES_EVENTS_SECRET>
-// A permanent bounce or a complaint marks the student's email as bad, and from then on they get SMS instead.
+// A permanent bounce or a complaint marks the student's email as bad, and from then on they are skipped.
 // Every message is checked twice: the secret key in the URL, and Amazon's signature on the message itself.
 const crypto = require('crypto');
 const { adminClient, bodyOf } = require('./_lib');
