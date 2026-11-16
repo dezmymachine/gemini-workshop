@@ -64,6 +64,11 @@ const templates = {
     [`Hi ${name}, reminder: your Gemini Workshop session (${label(s)}) is tomorrow, ${when(s).day}, ${when(s).time} GMT.`, link ? { link } : NOLINK]),
   broadcast: (name, s, link) => compose(`Your Gemini Workshop link: ${label(s)}`,
     [`Hi ${name}, here is the joining link for your Gemini Workshop session: ${sessionLine(s)}.`, { link }]),
+  // A session given to the student by the organisers (api/assign.js).
+  assigned: (name, s, link) => compose(`Your Gemini Workshop session: ${label(s)}`,
+    [`Hi ${name}, you registered for the Gemini Workshop but had not chosen a session, so the organisers have given you a seat: ${sessionLine(s)}.`,
+     link ? { link } : NOLINK,
+     'If this time does not suit you, sign in with your student number and password to change to another session.']),
   // For students who registered but have not chosen a session (tools/nudge-unbooked.js).
   nudge: (name, site) => compose('Choose your Gemini Workshop session',
     [`Hi ${name}, you registered for the Gemini Workshop but you have not chosen a session yet.`,

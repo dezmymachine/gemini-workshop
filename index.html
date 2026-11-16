@@ -407,7 +407,7 @@ var st = {
   mode:"connecting", portal:"student", view:"dash", counts:{}, seats:{}, admin:false, q:"", myCol:"", myPG:false, pickCol:"", pickPG:"",
   fDay:"all", fCol:"all", pick:null, form:BLANK(), booking:null, busy:false, msg:null, sheetMsg:null,
   confirmDrop:null, h:"", staff:null, sh:"", staffList:null, staffForm:null, ready:false,
-  auth:{fg:{email:""}, np:{pw:""}, tab:"in", step:1, in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, msg:null, busy:false}, find:{index:"",email:""}, adminSession:null, rq:"", pg:{}, links:{}, lastBc:{}, linkDraft:{}, confirmBroadcast:null, bcRun:null, fs:{day:"all",track:"all",status:"all"}, fr:{college:"all",level:"all",session:"all"}, live:"off", updatedAt:null, refreshing:false, people:[], unbooked:[], adminQ:"", rep:{college:"all"},
+  auth:{fg:{email:""}, np:{pw:""}, tab:"in", step:1, in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, msg:null, busy:false}, find:{index:"",email:""}, adminSession:null, rq:"", pg:{}, links:{}, lastBc:{}, linkDraft:{}, confirmBroadcast:null, bcRun:null, fs:{day:"all",track:"all",status:"all"}, fr:{college:"all",level:"all",session:"all"}, live:"off", updatedAt:null, refreshing:false, people:[], unbooked:[], adminQ:"", rep:{college:"all"}, asg:{sel:{}, mode:"one", sid:"", ask:null, run:null, res:null},
 };
 var API=null;
 function BLANKUP(){ return {name:"",index:"",email:"",phone:"",college:"",level:"",programme:"",pw:""}; }
@@ -598,6 +598,7 @@ function supaAPI(sb){
     unwatchAdmin: function(){ if(chan){ try{ sb.removeChannel(chan); }catch(e){} chan=null; } },
     staffSessions: function(){ return staffApi({action:"list"},"/api/sessions"); },
     setLink: function(sid,url){ return staffApi({action:"setLink",session_id:sid,url:url},"/api/sessions"); },
+    assign: function(sid,nums){ return staffApi({session_id:sid,students:nums},"/api/assign"); },
     broadcastStart: function(sid){ return staffApi({action:"start",session_id:sid},"/api/broadcast"); },
     broadcastProcess: function(id){ return staffApi({action:"process",id:id},"/api/broadcast"); },
     broadcastRetry: function(id){ return staffApi({action:"retry",id:id},"/api/broadcast"); },
@@ -965,9 +966,12 @@ async function submitLink(){
   st.busy=false; render(); window.scrollTo(0,0);
 }
 /* Students who registered but have not booked a session yet. */
+function unbookedShown(){
+  var list=(st.unbooked||[]).map(function(r){ return {sid:"",r:r}; }), q=(st.rq||"").trim().toLowerCase();
+  return {list:list, shown:q?list.filter(function(x){ return [x.r.n,x.r.i,x.r.e,x.r.ph,x.r.p].join(" ").toLowerCase().indexOf(q)>=0; }):list};
+}
 function renderUnbookedPage(){
-  var role=st.staff.role, list=(st.unbooked||[]).map(function(r){ return {sid:"",r:r}; }), q=(st.rq||"").trim().toLowerCase();
-  var shown=q?list.filter(function(x){ return [x.r.n,x.r.i,x.r.e,x.r.ph,x.r.p].join(" ").toLowerCase().indexOf(q)>=0; }):list;
+  var role=st.staff.role, u=unbookedShown(), list=u.list, shown=u.shown;
   var total=(st.people||[]).length;
   var h=msgHTML()+'<p style="margin:0"><a class="linkbtn" href="/staff" data-act="closeSession">← All sessions</a></p>'+
     '<div class="sec-head"><div><h2>Not booked yet</h2><p>Students who registered but have not chosen a session.'+(role==="coord"?' From '+esc(collegeName(st.staff.college))+'.':'')+'</p></div></div>'+
@@ -976,7 +980,7 @@ function renderUnbookedPage(){
     '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Have a session</span><span class="vl">'+(total-list.length)+'</span></div></section>'+
     '<div class="toolbar"><div class="field"><label for="rQ">Search this list</label><input id="rQ" type="search" value="'+esc(st.rq||"")+'" placeholder="Name, student number, email, phone or programme"></div>'+
     (API && API.canDownload && list.length?'<div class="btns"><button class="btn" data-act="csvUnbooked">Download this list (CSV)</button></div>':'')+'</div>'+
-    (list.length?frBar(shown,false):'')+
+    (list.length?frBar(shown,false):'')+(canAssign()&&(list.length||st.asg.res)?assignPanel(frApply(shown)):'')+
     '<div class="sched panel" style="padding:0">'+(list.length?rosterTable(frApply(shown),false,"unbooked"):'<div class="empty">Everyone who registered has chosen a session.</div>')+'</div>';
   return h;
 }
@@ -998,12 +1002,90 @@ function renderSessionPage(sid){
     '<div class="sched panel" style="padding:0">'+(rows.length?rosterTable(frApply(shown),false,"roster"):'<div class="empty">No one has booked this session yet.</div>')+'</div>';
   return h;
 }
+/* ---------- Give a session to students who have not booked (super admins and organisers) ---------- */
+function canAssign(){ return !!(st.staff && st.staff.role!=="coord" && API && API.assign); }
+function openForAssign(s){ return !s.g && s.start>Date.now() && left(s.id)>0; }
+/* Who the action applies to: the ticked students if any (still unbooked), otherwise everyone shown by the filters. */
+function asgTargets(shown,who){
+  if(who==="sel"){ var sel=st.asg.sel; return (st.unbooked||[]).filter(function(r){ return sel[normIndex(r.i)]; }); }
+  return shown.map(function(x){ return x.r; });
+}
+/* Plan: [{sid, rows}] plus students that cannot be placed. mode "one" = the chosen session; "spread" = each student's own
+   college sessions, always into the open session with the most seats left (so sessions fill evenly). */
+function asgPlan(rows){
+  var A=st.asg, plan={}, skip=[], room={};
+  SESSIONS.forEach(function(s){ room[s.id]=left(s.id); });
+  rows.forEach(function(r){
+    var t=trackOf(r.c), sid="";
+    if(A.mode==="one"){ var s=BY_ID[A.sid]; if(!s){ skip.push({r:r,why:"no session chosen"}); return; } if(s.track!==t){ skip.push({r:r,why:"different college"}); return; } sid=s.id; }
+    else { var best=null; SESSIONS.forEach(function(s){ if(s.track===t && openForAssign(s) && room[s.id]>0 && (!best || room[s.id]>room[best.id])) best=s; }); if(!best){ skip.push({r:r,why:"no open session for their college"}); return; } sid=best.id; room[sid]--; }
+    (plan[sid]=plan[sid]||[]).push(r);
+  });
+  return {groups:SESSIONS.filter(function(s){ return plan[s.id]; }).map(function(s){ return {sid:s.id, rows:plan[s.id]}; }), skip:skip};
+}
+function assignPanel(shown){
+  var A=st.asg, nSel=asgTargets(shown,"sel").length, busy=!!A.run;
+  var tracks={}; (nSel?asgTargets(shown,"sel"):shown.map(function(x){ return x.r; })).forEach(function(r){ tracks[trackOf(r.c)]=1; });
+  var opts=SESSIONS.filter(function(s){ return !s.g && tracks[s.track]; });
+  var h='<div class="panel" style="display:grid;gap:12px"><div><h3>Give a session</h3><p class="muted" style="margin:4px 0 0;font-size:14px">Tick students (or use the filters) and give them a session. Each student is emailed their session straight away. Only sessions for the student\'s own college can be given. Students can still change it themselves.</p></div>';
+  if(A.res){
+    var R=A.res;
+    h+='<div class="notice'+(R.assigned?'':' err')+'">Done: '+R.assigned+' student'+(R.assigned===1?'':'s')+' given a session, '+R.emailed+' emailed'+(R.emailFailed?' ('+R.emailFailed+' emails failed; the daily job will retry them)':'')+'.'+(R.skipped.length?' '+R.skipped.length+' not placed.':'')+(R.error?' Stopped: '+esc(R.error):'')+'</div>';
+    h+='<div class="btns">'+(R.skipped.length?'<button type="button" class="btn sm" data-act="csvAssignSkipped">Download the '+R.skipped.length+' not placed (CSV)</button>':'')+'<button type="button" class="btn sm" data-act="asgClear">OK</button></div>';
+    if(!shown.length) return h+'</div>';
+  }
+  h+='<div class="fbar" role="group" aria-label="Give a session"><label class="fsel"><span>How</span><select data-asgf="mode"'+(busy?' disabled':'')+'><option value="one"'+(A.mode==="one"?' selected':'')+'>One session for all of them</option><option value="spread"'+(A.mode==="spread"?' selected':'')+'>Spread across their college\'s sessions</option></select></label>';
+  if(A.mode==="one") h+='<label class="fsel"><span>Session</span><select data-asgf="sid"'+(busy?' disabled':'')+'><option value="">Choose a session…</option>'+opts.map(function(s){ var ok=openForAssign(s); return '<option value="'+esc(s.id)+'"'+(A.sid===s.id?' selected':'')+(ok?'':' disabled')+'>'+esc(longLabel(s))+' · '+(s.start<=Date.now()?'started':left(s.id)+' seats left')+'</option>'; }).join("")+'</select></label>';
+  h+='</div>';
+  if(A.ask){
+    var p=A.ask, n=p.groups.reduce(function(a,g){ return a+g.rows.length; },0);
+    h+='<div class="notice" style="display:grid;gap:8px"><strong>Give '+(A.mode==="one"&&p.groups.length===1?esc(longLabel(BY_ID[p.groups[0].sid])):'a session')+' to '+n+' student'+(n===1?'':'s')+' and email them?</strong>'+
+      (A.mode==="spread"&&p.groups.length?'<span style="font-size:14px">'+p.groups.map(function(g){ return esc(longLabel(BY_ID[g.sid]))+': '+g.rows.length; }).join("<br>")+'</span>':'')+
+      (p.skip.length?'<span style="font-size:14px">'+p.skip.length+' will be left out ('+esc(Object.keys(p.skip.reduce(function(o,x){ o[x.why]=1; return o; },{})).join(", "))+').</span>':'')+
+      '<div class="btns"><button type="button" class="btn primary sm" data-act="doAssign"'+(n?'':' disabled')+'>Yes, give and email</button><button type="button" class="btn sm" data-act="noAssign">Cancel</button></div></div>';
+  } else if(busy){
+    var pc=A.run.total?Math.round(A.run.done*100/A.run.total):0;
+    h+='<div><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="'+A.run.total+'" aria-valuenow="'+A.run.done+'"><i style="width:'+pc+'%"></i></div><span style="font-size:14px">Working: '+A.run.done+' of '+A.run.total+' done. Keep this page open.</span></div>';
+  } else {
+    var oneOk=A.mode!=="one"||!!A.sid;
+    h+='<div class="btns"><button type="button" class="btn primary" data-act="askAssign" data-who="sel"'+(nSel&&oneOk?'':' disabled')+'>Give to ticked students ('+nSel+')</button><button type="button" class="btn" data-act="askAssign" data-who="shown"'+(shown.length&&oneOk?'':' disabled')+'>Give to everyone shown ('+shown.length+')</button>'+(nSel?'<button type="button" class="linkbtn" data-act="asgNone">Untick all</button>':'')+'</div>';
+  }
+  return h+'</div>';
+}
+async function runAssign(){
+  var A=st.asg, p=A.ask; if(!p || A.run) return;
+  var jobs=[]; p.groups.forEach(function(g){ for(var i=0;i<g.rows.length;i+=100) jobs.push({sid:g.sid, rows:g.rows.slice(i,i+100)}); });
+  var total=jobs.reduce(function(a,j){ return a+j.rows.length; },0);
+  var R={assigned:0, emailed:0, emailFailed:0, skipped:p.skip.map(function(x){ return {r:x.r, why:x.why}; }), error:""};
+  A.ask=null; A.res=null; A.run={done:0,total:total}; st.msg=null; render();
+  for(var j=0;j<jobs.length;j++){
+    var job=jobs[j], byKey={}; job.rows.forEach(function(r){ byKey[normIndex(r.i)]=r; });
+    try{
+      var r=await API.assign(job.sid, job.rows.map(function(x){ return x.i; }));
+      R.assigned+=r.assigned||0; R.emailed+=r.emailed||0; R.emailFailed+=r.emailFailed||0;
+      (r.assignedNumbers||[]).forEach(function(n){ delete A.sel[normIndex(n)]; });
+      (r.skipped||[]).forEach(function(x){ R.skipped.push({r:byKey[normIndex(x.i)]||{i:x.i,n:"",c:""}, why:x.reason, sid:job.sid}); });
+    }catch(err){
+      R.error=err.message; for(var k=j;k<jobs.length;k++) jobs[k].rows.forEach(function(x){ R.skipped.push({r:x, why:"not sent: "+err.message, sid:jobs[k].sid}); });
+      break;
+    }
+    A.run.done+=job.rows.length; render();
+  }
+  A.run=null; A.res=R; await loadAdmin(); render();
+}
+function downloadAssignSkippedCSV(){
+  var R=st.asg.res; if(!R) return;
+  var lines=[["Name","Student number","Email","College","Session tried","Reason"]];
+  R.skipped.forEach(function(x){ lines.push([x.r.n||"",x.r.i||"",x.r.e||"",x.r.c||"",x.sid&&BY_ID[x.sid]?longLabel(BY_ID[x.sid]):"",x.why]); });
+  saveCSV("gemini-workshop-not-placed-"+new Date().toISOString().slice(0,10)+".csv",lines);
+}
 function rosterTable(rows,withSession,key){
   if(!rows.length) return '<div class="empty">No matching registrations.</div>';
   rows=rows.slice().sort(function(a,b){ return String(a.r.n).localeCompare(String(b.r.n)); });
-  var pg=pageSlice(key||"roster",rows,PAGE_PEOPLE); rows=pg.items;
-  return '<table><thead><tr><th>Name</th><th>Student no.</th><th>Email</th><th>Phone</th><th>College</th><th>Programme</th><th>Year</th>'+(withSession?'<th>Session</th>':'')+'</tr></thead><tbody>'+
-    rows.map(function(x){ var k=normIndex(x.r.i); return '<tr><td>'+esc(x.r.n)+'</td><td class="mono">'+esc(x.r.i)+'</td><td>'+esc(x.r.e)+(x.r.es&&x.r.es!=="ok"?' <span class="pill full">'+(x.r.es==="complained"?'Spam report':'Bounced')+'</span>':'')+'</td><td class="mono">'+esc(x.r.ph||'')+'</td><td>'+esc(x.r.c)+'</td><td>'+esc(x.r.p)+'</td><td>'+esc(yearLabel(x.r.l))+'</td>'+(withSession?'<td>'+esc(longLabel(BY_ID[x.sid]))+'</td>':'')+
+  var all=rows, pg=pageSlice(key||"roster",rows,PAGE_PEOPLE); rows=pg.items;
+  var ck=key==="unbooked" && canAssign(), sel=st.asg.sel;
+  return '<table><thead><tr>'+(ck?'<th style="width:36px"><input type="checkbox" data-asgall="1" aria-label="Select all '+all.length+' students shown"'+(all.length&&all.every(function(x){ return sel[normIndex(x.r.i)]; })?' checked':'')+'></th>':'')+'<th>Name</th><th>Student no.</th><th>Email</th><th>Phone</th><th>College</th><th>Programme</th><th>Year</th>'+(withSession?'<th>Session</th>':'')+'</tr></thead><tbody>'+
+    rows.map(function(x){ var k=normIndex(x.r.i); return '<tr>'+(ck?'<td><input type="checkbox" data-asg="'+esc(k)+'" aria-label="Select '+esc(x.r.n)+'"'+(sel[k]?' checked':'')+'></td>':'')+'<td>'+esc(x.r.n)+'</td><td class="mono">'+esc(x.r.i)+'</td><td>'+esc(x.r.e)+(x.r.es&&x.r.es!=="ok"?' <span class="pill full">'+(x.r.es==="complained"?'Spam report':'Bounced')+'</span>':'')+'</td><td class="mono">'+esc(x.r.ph||'')+'</td><td>'+esc(x.r.c)+'</td><td>'+esc(x.r.p)+'</td><td>'+esc(yearLabel(x.r.l))+'</td>'+(withSession?'<td>'+esc(longLabel(BY_ID[x.sid]))+'</td>':'')+
       '</tr>'; }).join("")+'</tbody></table>'+pagerHTML(key||"roster",pg);
 }
 /* ---------- Reports (staff): one college at a time, broken down by session, day, year and programme ---------- */
@@ -1422,7 +1504,7 @@ document.addEventListener("click",async function(e){
   if(a==="toList") return toList();
   if(a==="toMine") return go("mine");
   if(a==="findCollege"||a==="change"||a==="findGrasag"){ st.msg=null; st.view="dash"; render(); return toList(); }
-  if(a==="signOut"||a==="toAuth"){ if(API&&API.signOut) API.signOut(); var wasStaff=!!st.staff; st.booking=null; st.h=""; remember(null); setCollege(""); st.staff=null; st.sh=""; st.staffList=null; st.staffForm=null; try{ localStorage.removeItem("gw-staff"); }catch(e){} if(API&&API.live) st.seats={}; stopLive(); st.adminSession=null; st.links={}; st.lastBc={}; st.linkDraft={}; st.confirmBroadcast=null; st.bcRun=null; st.msg=null; st.pick=null; st.view="dash"; st.auth.tab="in"; render(); window.scrollTo(0,0); return; }
+  if(a==="signOut"||a==="toAuth"){ if(API&&API.signOut) API.signOut(); var wasStaff=!!st.staff; st.booking=null; st.h=""; remember(null); setCollege(""); st.staff=null; st.sh=""; st.staffList=null; st.staffForm=null; try{ localStorage.removeItem("gw-staff"); }catch(e){} if(API&&API.live) st.seats={}; stopLive(); st.adminSession=null; st.links={}; st.lastBc={}; st.linkDraft={}; st.confirmBroadcast=null; st.bcRun=null; st.asg={sel:{}, mode:"one", sid:"", ask:null, run:null, res:null}; st.msg=null; st.pick=null; st.view="dash"; st.auth.tab="in"; render(); window.scrollTo(0,0); return; }
   if(a==="newStaff"){ st.staffForm={edit:false,name:"",email:"",role:"organiser",college:"",pw:""}; st.msg=null; render(); return; }
   if(a==="editStaff"){ var u=(st.staffList||[]).filter(function(x){return x.email===b.dataset.email;})[0]; if(u){ st.staffForm={edit:true,name:u.name,email:u.email,role:u.role,college:u.college||"",pw:""}; st.msg=null; render(); window.scrollTo(0,0); } return; }
   if(a==="cancelStaff"){ st.staffForm=null; render(); return; }
@@ -1433,7 +1515,7 @@ document.addEventListener("click",async function(e){
   if(a==="doDrop") return dropSeat(b.dataset.sid);
   if(a==="openSession"||a==="closeSession"){
     if(e.metaKey||e.ctrlKey||e.shiftKey||e.button) return;
-    e.preventDefault(); st.adminSession = a==="openSession" ? b.dataset.sid : null; st.rq=""; st.pg.roster=1; st.msg=null; st.fr={college:"all",level:"all",session:"all"};
+    e.preventDefault(); st.adminSession = a==="openSession" ? b.dataset.sid : null; st.rq=""; st.pg.roster=1; st.msg=null; st.fr={college:"all",level:"all",session:"all"}; st.asg.ask=null;
     try{ history.pushState(null,"", a==="openSession" ? "/staff?session="+encodeURIComponent(b.dataset.sid) : "/staff"); }catch(err){}
     render(); window.scrollTo(0,0); return;
   }
@@ -1451,6 +1533,12 @@ document.addEventListener("click",async function(e){
   if(a==="pg"){ st.pg[b.dataset.key]=+b.dataset.to; render(); var box=b.closest(".panel"); if(box) box.scrollIntoView({block:"start"}); return; }
   if(a==="csv") return downloadCSV();
   if(a==="csvUnbooked") return downloadUnbookedCSV();
+  if(a==="askAssign"){ var su=frApply(unbookedShown().shown), tg=asgTargets(su,b.dataset.who); st.asg.res=null; st.asg.ask=asgPlan(tg); render(); return; }
+  if(a==="noAssign"){ st.asg.ask=null; render(); return; }
+  if(a==="doAssign") return runAssign();
+  if(a==="asgNone"){ st.asg.sel={}; render(); return; }
+  if(a==="asgClear"){ st.asg.res=null; render(); return; }
+  if(a==="csvAssignSkipped") return downloadAssignSkippedCSV();
   if(a==="csvSession") return downloadSessionCSV();
   if(a==="csvReport") return downloadReportCSV();
   if(a==="csvReportStudents") return downloadReportStudentsCSV();
@@ -1467,9 +1555,12 @@ document.addEventListener("input",function(e){
   if(t.dataset && t.dataset.sf && st.staffForm){ st.staffForm[t.dataset.sf]=t.value; if(t.dataset.sf==="role") render(); return; }
   if(t.id==="q"){ st.q=t.value; if(st.view!=="dash") st.view="dash"; render(); return; }
   if(t.id==="adminQ"){ st.adminQ=t.value; st.pg.search=1; render(); }
-  if(t.dataset && t.dataset.flt){ var fp=t.dataset.flt.split("."); st[fp[0]][fp[1]]=t.value; if(fp[0]==="fs") st.pg.sessions=1; else { st.pg.roster=1; st.pg.search=1; st.pg.unbooked=1; } render(); return; }
+  if(t.dataset && t.dataset.flt){ st.asg.ask=null; var fp=t.dataset.flt.split("."); st[fp[0]][fp[1]]=t.value; if(fp[0]==="fs") st.pg.sessions=1; else { st.pg.roster=1; st.pg.search=1; st.pg.unbooked=1; } render(); return; }
   if(t.id==="linkUrl" && st.adminSession){ st.linkDraft[st.adminSession]=t.value; var ab=document.querySelector("[data-act=askBroadcast]"); if(ab) ab.disabled = !((st.links||{})[st.adminSession]) || t.value.trim()!==(st.links||{})[st.adminSession]; return; }
-  if(t.id==="rQ"){ st.rq=t.value; st.pg.roster=1; st.pg.unbooked=1; render(); }
+  if(t.id==="rQ"){ st.asg.ask=null; st.rq=t.value; st.pg.roster=1; st.pg.unbooked=1; render(); }
+  if(t.dataset && t.dataset.asg){ if(t.checked) st.asg.sel[t.dataset.asg]=1; else delete st.asg.sel[t.dataset.asg]; st.asg.ask=null; render(); return; }
+  if(t.dataset && t.dataset.asgall){ frApply(unbookedShown().shown).forEach(function(x){ var k=normIndex(x.r.i); if(t.checked) st.asg.sel[k]=1; else delete st.asg.sel[k]; }); st.asg.ask=null; render(); return; }
+  if(t.dataset && t.dataset.asgf){ st.asg[t.dataset.asgf]=t.value; st.asg.ask=null; render(); return; }
 });
 document.addEventListener("submit",function(e){
   e.preventDefault();

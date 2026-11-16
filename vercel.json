@@ -47,6 +47,9 @@
     },
     "api/notify.js": {
       "maxDuration": 30
+    },
+    "api/assign.js": {
+      "maxDuration": 30
     }
   }
 }
