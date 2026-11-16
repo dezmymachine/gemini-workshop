@@ -979,7 +979,7 @@ function renderSessionPage(sid){
     '<div class="stat"><span class="ic">'+ICON.ticket+'</span><span class="lb">Status</span><span class="vl" style="font-size:24px">'+(l===0?'Full':'Open')+'</span></div></section>'+
     (role==="coord"?'':linkPanel(sid,rows))+
     '<div class="toolbar"><div class="field"><label for="rQ">Search this list</label><input id="rQ" type="search" value="'+esc(st.rq||"")+'" placeholder="Name, student number, email, phone or programme"></div>'+
-    (API && API.canDownload && list.length?'<div class="btns"><button class="btn" data-act="csvUnbooked">Download this list (CSV)</button></div>':'')+'</div>'+
+    (API && API.canDownload && rows.length?'<div class="btns"><button class="btn" data-act="csvSession">Download this list (CSV)</button></div>':'')+'</div>'+
     (rows.length?frBar(shown,false):'')+
     '<div class="sched panel" style="padding:0">'+(rows.length?rosterTable(frApply(shown),false,"roster"):'<div class="empty">No one has booked this session yet.</div>')+'</div>';
   return h;
@@ -1258,7 +1258,14 @@ function render(){
   document.getElementById("authSlot").innerHTML = authOn ? (st.ready ? authHTML() : '<div class="auth"><section class="auth-main" style="grid-column:1/-1"><div class="auth-card"><div class="empty">Loading…</div></div></section></div>') : "";
   if(!authOn){
     renderNav();
-    app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : st.view==="profile" ? renderProfile() : renderSchedule();
+    try{
+      app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : st.view==="profile" ? renderProfile() : renderSchedule();
+    }catch(err){
+      /* Never leave a stale screen: show what happened and a way back. */
+      try{ console.error(err); }catch(e){}
+      if(st.staff) st.adminSession=null;
+      app.innerHTML='<div class="notice err" role="alert">Something went wrong showing this page. Please reload, or go back.</div><p><a class="linkbtn" href="'+(st.staff?'/staff':'/')+'">'+(st.staff?'← All sessions':'← Home')+'</a></p>';
+    }
   } else app.innerHTML="";
   var hadSheet=!!document.querySelector(".sheet");
   document.getElementById("sheetSlot").innerHTML = (st.pick && st.booking) ? renderSheet() : "";
@@ -1339,6 +1346,7 @@ document.addEventListener("click",async function(e){
   if(a==="pg"){ st.pg[b.dataset.key]=+b.dataset.to; render(); var box=b.closest(".panel"); if(box) box.scrollIntoView({block:"start"}); return; }
   if(a==="csv") return downloadCSV();
   if(a==="csvUnbooked") return downloadUnbookedCSV();
+  if(a==="csvSession") return downloadSessionCSV();
   if(a==="refresh"){ st.refreshing=true; render(); await loadAdmin(); st.refreshing=false; render(); return; }
 });
 document.addEventListener("keydown",function(e){
@@ -1410,6 +1418,15 @@ async function downloadUnbookedCSV(){
   var lines=[["Name","Student number","Email","Phone","College","Programme","Year","Registered at"]];
   frApply(list).forEach(function(x){ var r=x.r; lines.push([r.n,r.i,r.e,r.ph||"",r.c,r.p,yearLabel(r.l),r.t?new Date(r.t).toISOString():""]); });
   await saveCSV("gemini-workshop-not-booked-"+new Date().toISOString().slice(0,10)+".csv", lines);
+}
+/* One session's booked students, as shown on its page: the search box and filters apply. */
+async function downloadSessionCSV(){
+  var sid=st.adminSession; if(!sid || !BY_ID[sid]) return;
+  var q=(st.rq||"").trim().toLowerCase(), rows=allRows().filter(function(x){ return x.sid===sid; });
+  if(q) rows=rows.filter(function(x){ return [x.r.n,x.r.i,x.r.e,x.r.ph,x.r.p].join(" ").toLowerCase().indexOf(q)>=0; });
+  var lines=[["Name","Student number","Email","Phone","College","Programme","Year","Registered at"]];
+  frApply(rows).forEach(function(x){ var r=x.r; lines.push([r.n,r.i,r.e,r.ph||"",r.c,r.p,yearLabel(r.l),r.t?new Date(r.t).toISOString():""]); });
+  await saveCSV("gemini-workshop-"+sid+"-"+new Date().toISOString().slice(0,10)+".csv", lines);
 }
 async function saveCSV(name, lines){
   var csv=lines.map(function(l){ return l.map(function(v){ v=String(v==null?"":v); if(/^[=+\-@\t\r]/.test(v)) v="'"+v; return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(","); }).join("\n");
