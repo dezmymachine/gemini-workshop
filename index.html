@@ -106,6 +106,19 @@ button,input,select{font:inherit;color:inherit}
 .stat .vl{font-family:var(--f-display);font-size:34px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
 .stat .sub{font-size:13px;color:var(--muted)}
 
+/* reports: horizontal bar charts (booked = solid, rest = soft) */
+.rep-sec{display:grid;gap:14px}
+.rep-sec h3 small{font-family:var(--f-body,inherit);font-size:14px;font-weight:400;color:var(--muted)}
+.bars{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.bar-row{display:grid;grid-template-columns:minmax(120px,240px) minmax(0,1fr) auto;gap:12px;align-items:center;font-size:14px}
+.bar-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-t{height:14px;border-radius:7px;background:var(--accent-soft);overflow:hidden}
+.bar-b{display:block;height:100%;background:var(--accent);border-radius:7px 0 0 7px}
+.bar-n{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap;min-width:90px;text-align:right}
+.bar-key{display:flex;gap:16px;font-size:13px;color:var(--muted)}
+.bar-key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+@media (max-width:640px){.bar-row{grid-template-columns:minmax(0,1fr) auto}.bar-t{grid-column:1/-1;grid-row:2}}
+
 /* sections & filters */
 .sec-head{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:end;justify-content:space-between}
 .sec-head p{margin:6px 0 0;color:var(--muted)}
@@ -394,7 +407,7 @@ var st = {
   mode:"connecting", portal:"student", view:"dash", counts:{}, seats:{}, admin:false, q:"", myCol:"", myPG:false, pickCol:"", pickPG:"",
   fDay:"all", fCol:"all", pick:null, form:BLANK(), booking:null, busy:false, msg:null, sheetMsg:null,
   confirmDrop:null, h:"", staff:null, sh:"", staffList:null, staffForm:null, ready:false,
-  auth:{fg:{email:""}, np:{pw:""}, tab:"in", step:1, in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, msg:null, busy:false}, find:{index:"",email:""}, adminSession:null, rq:"", pg:{}, links:{}, lastBc:{}, linkDraft:{}, confirmBroadcast:null, bcRun:null, fs:{day:"all",track:"all",status:"all"}, fr:{college:"all",level:"all",session:"all"}, live:"off", updatedAt:null, refreshing:false, people:[], unbooked:[], adminQ:"",
+  auth:{fg:{email:""}, np:{pw:""}, tab:"in", step:1, in:{index:"",pw:""}, up:null, st:{email:"",pw:""}, msg:null, busy:false}, find:{index:"",email:""}, adminSession:null, rq:"", pg:{}, links:{}, lastBc:{}, linkDraft:{}, confirmBroadcast:null, bcRun:null, fs:{day:"all",track:"all",status:"all"}, fr:{college:"all",level:"all",session:"all"}, live:"off", updatedAt:null, refreshing:false, people:[], unbooked:[], adminQ:"", rep:{college:"all"},
 };
 var API=null;
 function BLANKUP(){ return {name:"",index:"",email:"",phone:"",college:"",level:"",programme:"",pw:""}; }
@@ -450,7 +463,8 @@ var ICON={
   seat:svg('<path d="M5 11V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v5"/><path d="M3 11h18v5H3zM6 16v4M18 16v4"/>',20),
   timer:svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',20),
   ticket:svg('<path d="M3 9a2 2 0 0 0 0 4v4h18v-4a2 2 0 0 0 0-4V5H3z"/><path d="M13 5v14" stroke-dasharray="2 2"/>',20),
-  x:svg('<path d="M6 6l12 12M18 6L6 18"/>')
+  x:svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  chart:svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>')
 };
 
 var ROLES={super:"Super admin",organiser:"Organiser",coord:"College coordinator"};
@@ -673,7 +687,7 @@ function matchesQ(s){
 var NAV=[["dash","Dashboard","dash"],["mine","Sessions","book"],["schedule","Schedule","sched"]];
 function renderNav(){
   var items;
-  if(st.staff){ items=[["admin","Registrations","org"]]; if(st.staff.role==="super") items.push(["users","Staff & roles","users"]); }
+  if(st.staff){ items=[["admin","Registrations","org"],["reports","Reports","chart"]]; if(st.staff.role==="super") items.push(["users","Staff & roles","users"]); }
   else items=NAV.slice();
   var html=function(){
     return items.map(function(n){
@@ -992,6 +1006,97 @@ function rosterTable(rows,withSession,key){
     rows.map(function(x){ var k=normIndex(x.r.i); return '<tr><td>'+esc(x.r.n)+'</td><td class="mono">'+esc(x.r.i)+'</td><td>'+esc(x.r.e)+(x.r.es&&x.r.es!=="ok"?' <span class="pill full">'+(x.r.es==="complained"?'Spam report':'Bounced')+'</span>':'')+'</td><td class="mono">'+esc(x.r.ph||'')+'</td><td>'+esc(x.r.c)+'</td><td>'+esc(x.r.p)+'</td><td>'+esc(yearLabel(x.r.l))+'</td>'+(withSession?'<td>'+esc(longLabel(BY_ID[x.sid]))+'</td>':'')+
       '</tr>'; }).join("")+'</tbody></table>'+pagerHTML(key||"roster",pg);
 }
+/* ---------- Reports (staff): one college at a time, broken down by session, day, year and programme ---------- */
+/* Programme is typed freely ("BSc. Computer Engineering", "Computer engineering"...). progGroup gives a grouping key that ignores
+   degree words, punctuation, case, "and"/"/" and a few common spellings, plus a readable label for that spelling. */
+function progGroup(p){
+  var k=String(p||"").toLowerCase().replace(/&/g," and ").replace(/\((hons?|honours)\)|\bhonours\b|\bhons\b/g," ").replace(/[.,()\[\]'"–—-]/g," ").replace(/\s*\/\s*/g," / ").replace(/\s+/g," ").trim();
+  var DEG=/^(b ?sc|bachelors? of (science|arts|education|engineering)|b ?a|b ?eng|b ?ed|bba|llb|m ?phil|m ?sc|m ?a|m ?eng|ph ?d|hnd|diploma|doctor of pharmacy|pharm ?d|mb ?ch ?b|b ?pharm|bfa|mba|degree)\b\s*(in\b|of\b)?\s*/;
+  for(var n=0;n<3 && DEG.test(k);n++) k=k.replace(DEG,"").trim();
+  k=k.replace(/^(in|of)\s+/,"")
+     .replace(/\belectronics\b/g,"electronic").replace(/\btelecommunications\b/g,"telecommunication").replace(/\bhuman resources\b/g,"human resource")
+     .replace(/\bsciences\b/g,"science").replace(/\bsystems\b/g,"system").replace(/\bgis\b/g,"geographic information system").replace(/\bmgt\b|\bmgmt\b/g,"management")
+     .replace(/\badmin\b/g,"administration").replace(/\bengg?\b|\bengr\b/g,"engineering").replace(/\s+/g," ").trim();
+  var label=k.replace(/ \/ /g,"/").replace(/\b([a-z])/g,function(c){ return c.toUpperCase(); }).replace(/\b(And|Of|In|For)\b/g,function(w){ return w.toLowerCase(); });
+  var key=k.replace(/\band\b|\//g," ").replace(/\s+/g," ").trim();
+  return key ? {key:key, label:label} : {key:"", label:"Not stated"};
+}
+function repCollege(){ return st.staff && st.staff.role==="coord" ? st.staff.college : (st.rep.college||"all"); }
+function pct(a,b){ return b ? Math.round(a*100/b) : 0; }
+function reportData(col){
+  var people=(st.people||[]).filter(function(r){ return col==="all" || r.c===col; });
+  var booked=people.filter(function(r){ return r.s || r.g; });
+  var t=col==="all" ? null : trackOf(col);
+  var sess=SESSIONS.filter(function(s){ return !t || s.track===t || s.g; });
+  var inSess={}, perDay={};
+  people.forEach(function(r){ [r.s,r.g].forEach(function(sid){ if(sid && BY_ID[sid]){ inSess[sid]=(inSess[sid]||0)+1; var d=BY_ID[sid].day; perDay[d]=(perDay[d]||0)+1; } }); });
+  var bySession=sess.map(function(s){ return {s:s, label:TRACKS[s.track].code+" · "+s.title, mine:inSess[s.id]||0, total:count(s.id), cap:cap(s.id), left:left(s.id)}; })
+    .filter(function(x){ return !x.s.g || col==="all" || x.mine>0; });   /* GRASAG sessions only when this college has postgraduates in them */
+  var byDay=DAY_ORDER.map(function(d){ return {label:DAYS[d].date, n:perDay[d]||0}; }).filter(function(x){ return x.n>0 || col==="all"; });
+  var yrs={}; people.forEach(function(r){ var y=r.l||""; var o=yrs[y]||(yrs[y]={label:yearLabel(y)||"Not stated", reg:0, bk:0}); o.reg++; if(r.s||r.g) o.bk++; });
+  var byYear=LEVELS.concat(Object.keys(yrs).filter(function(y){ return LEVELS.indexOf(y)<0; })).filter(function(y){ return yrs[y]; }).map(function(y){ return yrs[y]; });
+  var pg={}; people.forEach(function(r){ var g=progGroup(r.p), o=pg[g.key]||(pg[g.key]={labels:{}, reg:0, bk:0}); o.labels[g.label]=(o.labels[g.label]||0)+1; o.reg++; if(r.s||r.g) o.bk++; });
+  var byProg=Object.keys(pg).map(function(k){ var o=pg[k], best=Object.keys(o.labels).sort(function(a,b){ return o.labels[b]-o.labels[a]; })[0]; return {label:best, reg:o.reg, bk:o.bk}; })
+    .sort(function(a,b){ return b.reg-a.reg || (a.label<b.label?-1:1); });
+  return {people:people, reg:people.length, bk:booked.length, bySession:bySession, byDay:byDay, byYear:byYear, byProg:byProg};
+}
+/* rows: [{label, a (solid part), b (whole bar), text}]; the longest bar = max. */
+function barChart(rows, caption){
+  var max=Math.max.apply(null, rows.map(function(r){ return r.b; }).concat([1]));
+  return '<ul class="bars" aria-label="'+esc(caption)+'">'+rows.map(function(r){
+    var w=Math.round(r.b*100/max), f=r.b?Math.round(r.a*100/r.b):0;
+    return '<li class="bar-row"><span class="bar-l" title="'+esc(r.label)+'">'+esc(r.label)+'</span><span class="bar-t" style="width:'+Math.max(w,2)+'%"><span class="bar-b" style="width:'+f+'%"></span></span><span class="bar-n">'+esc(r.text)+'</span></li>';
+  }).join("")+'</ul>';
+}
+function keyHTML(a,b){ return '<div class="bar-key"><span><i style="background:var(--accent)"></i>'+esc(a)+'</span><span><i style="background:var(--accent-soft)"></i>'+esc(b)+'</span></div>'; }
+function repTable(head, rows){ return '<div class="sched panel" style="padding:0"><table class="admin-table"><thead><tr>'+head.map(function(h,i){ return '<th'+(i?' class="num"':'')+'>'+esc(h)+'</th>'; }).join("")+'</tr></thead><tbody>'+rows.map(function(r){ return '<tr>'+r.map(function(v,i){ return '<td'+(i?' class="num mono"':'')+'>'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+'</tbody></table></div>'; }
+function renderReports(){
+  var col=repCollege(), d=reportData(col), role=st.staff.role, name=col==="all"?"All colleges":collegeName(col);
+  var h=msgHTML()+'<div class="sec-head"><div><h2>Reports</h2><p>'+esc(name)+': who registered and who booked, by session, day, year and programme.</p></div></div>';
+  h+='<div class="toolbar">'+(role==="coord"?'':'<div class="filters">'+selHTML("rep.college","College",[["all","All colleges"]].concat(COLLEGES.map(function(c){ return [c.id,c.name]; })),col)+'</div>')+'<div class="btns">';
+  if(API && API.canDownload) h+='<button class="btn" data-act="csvReport">Download report (CSV)</button><button class="btn" data-act="csvReportStudents">Download student list (CSV)</button>';
+  if(API && API.live) h+='<button class="btn" data-act="refresh"'+(st.refreshing?' disabled':'')+'>'+(st.refreshing?'Refreshing…':'Refresh')+'</button>';
+  h+='</div></div>'+liveChip();
+  h+='<section class="stats s4" aria-label="Summary">'+
+    '<div class="stat"><span class="lb">Registered</span><span class="vl">'+d.reg+'</span></div>'+
+    '<div class="stat"><span class="lb">Booked a session</span><span class="vl">'+d.bk+'</span></div>'+
+    '<div class="stat"><span class="lb">Not booked yet</span><span class="vl">'+(d.reg-d.bk)+'</span></div>'+
+    '<div class="stat"><span class="lb">Booking rate</span><span class="vl">'+pct(d.bk,d.reg)+'%</span></div></section>';
+  if(!d.reg) return h+'<div class="empty">No students have registered from '+esc(name)+' yet.</div>';
+  var other=col==="all"?"":" (all colleges)";
+  h+='<section class="panel rep-sec"><h3>By session <small>seats booked'+(col==="all"?'':' by '+esc(name)+' students')+'</small></h3>'+keyHTML(col==="all"?"Booked":"Booked by this college", "Rest of capacity")+
+    barChart(d.bySession.map(function(x){ return {label:x.label+" · "+DAYS[x.s.day].short, a:x.mine, b:x.cap, text:x.mine+" / "+x.cap}; }),"Bookings per session")+
+    repTable(["Session","Day","Time",col==="all"?"Booked":"From this college","Total booked"+other,"Capacity","Seats left"], d.bySession.map(function(x){ return [x.label, DAYS[x.s.day].short, x.s.time, x.mine, x.total, x.cap, x.left]; }))+'</section>';
+  h+='<section class="panel rep-sec"><h3>By day <small>seats booked</small></h3>'+
+    barChart(d.byDay.map(function(x){ return {label:x.label, a:x.n, b:x.n, text:String(x.n)}; }),"Bookings per day")+'</section>';
+  h+='<section class="panel rep-sec"><h3>By year</h3>'+keyHTML("Booked","Not booked yet")+
+    barChart(d.byYear.map(function(x){ return {label:x.label, a:x.bk, b:x.reg, text:x.bk+" of "+x.reg+" ("+pct(x.bk,x.reg)+"%)"}; }),"Bookings per year")+'</section>';
+  var top=d.byProg.slice(0,15);
+  h+='<section class="panel rep-sec"><h3>By programme <small>'+d.byProg.length+' programmes'+(d.byProg.length>15?', top 15 in the chart':'')+'. Similar spellings are grouped.</small></h3>'+keyHTML("Booked","Not booked yet")+
+    barChart(top.map(function(x){ return {label:x.label, a:x.bk, b:x.reg, text:x.bk+" of "+x.reg}; }),"Bookings per programme")+
+    repTable(["Programme","Registered","Booked","Not booked","% booked"], d.byProg.map(function(x){ return [x.label, x.reg, x.bk, x.reg-x.bk, pct(x.bk,x.reg)+"%"]; }))+'</section>';
+  return h;
+}
+async function downloadReportCSV(){
+  var col=repCollege(), d=reportData(col), name=col==="all"?"All colleges":collegeName(col), L=[];
+  L.push(["Gemini Workshop report",name,"Generated "+new Date().toISOString().slice(0,16).replace("T"," ")+" GMT"],[]);
+  L.push(["Summary"],["Registered",d.reg],["Booked a session",d.bk],["Not booked yet",d.reg-d.bk],["Booking rate",pct(d.bk,d.reg)+"%"],[]);
+  L.push(["By session"],["Day","Time","Session",col==="all"?"Booked":"From this college","Total booked","Capacity","Seats left"]);
+  d.bySession.forEach(function(x){ L.push([DAYS[x.s.day].date, x.s.time, x.label, x.mine, x.total, x.cap, x.left]); }); L.push([]);
+  L.push(["By day"],["Day","Seats booked"]); d.byDay.forEach(function(x){ L.push([x.label,x.n]); }); L.push([]);
+  L.push(["By year"],["Year","Registered","Booked","Not booked","% booked"]); d.byYear.forEach(function(x){ L.push([x.label,x.reg,x.bk,x.reg-x.bk,pct(x.bk,x.reg)+"%"]); }); L.push([]);
+  L.push(["By programme"],["Programme","Registered","Booked","Not booked","% booked"]); d.byProg.forEach(function(x){ L.push([x.label,x.reg,x.bk,x.reg-x.bk,pct(x.bk,x.reg)+"%"]); });
+  await saveCSV("gemini-workshop-report-"+(col==="all"?"all":col)+"-"+new Date().toISOString().slice(0,10)+".csv", L);
+}
+async function downloadReportStudentsCSV(){
+  var col=repCollege(), d=reportData(col);
+  var L=[["Name","Student number","Email","Phone","College","Programme (as typed)","Programme group","Year","Booked?","Session","Day","Time","GRASAG session"]];
+  d.people.slice().sort(function(a,b){ return (a.n||"").localeCompare(b.n||""); }).forEach(function(r){
+    var s=r.s&&BY_ID[r.s], g=r.g&&BY_ID[r.g];
+    L.push([r.n,r.i,r.e,r.ph||"",r.c,r.p,progGroup(r.p).label,yearLabel(r.l),(r.s||r.g)?"Yes":"No",s?TRACKS[s.track].code+" "+s.title:"",s?DAYS[s.day].date:"",s?s.time:"",g?g.title+", "+DAYS[g.day].short+" "+g.time:""]);
+  });
+  await saveCSV("gemini-workshop-students-"+(col==="all"?"all":col)+"-"+new Date().toISOString().slice(0,10)+".csv", L);
+}
 function renderUsers(){
   var h=msgHTML();
   h+='<div class="sec-head"><div><h2>Staff &amp; roles</h2><p>Create staff accounts and choose what each person can see.</p></div><button class="btn primary sm" data-act="newStaff">Add staff member</button></div>';
@@ -1246,8 +1351,8 @@ async function saveStaffForm(){
 
 var app=document.getElementById("app");
 function render(){
-  if(st.staff && ["admin","users"].indexOf(st.view)<0) st.view="admin";
-  if(!st.staff && ["admin","users"].indexOf(st.view)>=0) st.view="dash";
+  if(st.staff && ["admin","users","reports"].indexOf(st.view)<0) st.view="admin";
+  if(!st.staff && ["admin","users","reports"].indexOf(st.view)>=0) st.view="dash";
   if(st.view==="profile" && (st.staff || !st.booking)) st.view="dash";
   var authOn = !st.booking && !st.staff;
   document.body.classList.toggle("auth-on", authOn);
@@ -1259,7 +1364,7 @@ function render(){
   if(!authOn){
     renderNav();
     try{
-      app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : st.view==="profile" ? renderProfile() : renderSchedule();
+      app.innerHTML = st.staff ? (st.view==="users" && st.staff.role==="super" ? renderUsers() : st.view==="reports" ? renderReports() : renderAdmin()) : st.view==="dash" ? renderDash() : st.view==="mine" ? renderMine() : st.view==="profile" ? renderProfile() : renderSchedule();
     }catch(err){
       /* Never leave a stale screen: show what happened and a way back. */
       try{ console.error(err); }catch(e){}
@@ -1347,6 +1452,8 @@ document.addEventListener("click",async function(e){
   if(a==="csv") return downloadCSV();
   if(a==="csvUnbooked") return downloadUnbookedCSV();
   if(a==="csvSession") return downloadSessionCSV();
+  if(a==="csvReport") return downloadReportCSV();
+  if(a==="csvReportStudents") return downloadReportStudentsCSV();
   if(a==="refresh"){ st.refreshing=true; render(); await loadAdmin(); st.refreshing=false; render(); return; }
 });
 document.addEventListener("keydown",function(e){
