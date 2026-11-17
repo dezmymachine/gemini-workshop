@@ -946,7 +946,7 @@ function renderAdmin(){
   sp.items.forEach(function(s){
     var l=left(s.id);
     h+='<tr class="rowlink" data-act="openSession" data-sid="'+s.id+'"><td class="mono">'+esc(DAYS[s.day].short)+'<br><span class="muted">'+esc(s.time)+'</span></td><td>'+esc(TRACKS[s.track].name)+'<br><span class="muted">'+esc(TRACKS[s.track].code)+'</span></td><td>'+esc(s.title)+(s.closed?' <span class="pill plain">Closed</span>':'')+'</td><td class="num mono">'+(role==="coord"?(by[s.id]||0):count(s.id))+'</td><td class="num">'+(l===0?'<span class="pill full">Full</span>':'<span class="mono">'+l+'</span>')+'</td>'+
-      (role==="coord"?'':'<td>'+(st.links&&st.links[s.id]?'<span class="pill">Link set</span>':'<span class="pill plain">No link</span>')+'</td>')+
+      (role==="coord"?'':'<td>'+(st.links&&st.links[s.id]?'<span class="pill">Link set</span>':'<span class="pill plain">No link</span>')+bcLine(s.id)+'</td>')+
       '<td><a class="linkbtn" href="/staff?session='+encodeURIComponent(s.id)+'" data-act="openSession" data-sid="'+s.id+'">View list</a></td></tr>';
   });
   if(!sp.items.length) h+='<tr><td colspan="'+(role==="coord"?6:7)+'"><div class="empty" style="border:0">No sessions match these filters.</div></td></tr>';
@@ -967,6 +967,13 @@ async function setSessionClosed(sid,closed){
   try{ var r=await API.setClosed(sid,closed); BY_ID[sid].closed=!!r.closed; closedPin[sid]={val:!!r.closed, until:Date.now()+60000}; st.confirmClose=null; st.msg={text:r.closed?"Session closed. Nobody new can book it; students already booked keep their seat.":"Session reopened. Students can book it again."}; }
   catch(err){ st.msg={err:true,text:err.message}; }
   st.busy=false; render(); window.scrollTo(0,0);
+}
+/* Sessions table: which group the link was last sent to (all booked / undergraduates / postgraduates). */
+function bcGroup(b){ return ({ug:"Undergraduates",pg:"Postgraduates"})[b&&b.audience]||"All booked"; }
+function bcLine(sid){
+  var b=(st.lastBc||{})[sid]; if(!b) return '<br><span class="muted" style="font-size:12px">Not sent yet</span>';
+  var when=""; try{ when=new Date(b.at).toLocaleString("en-GB",{timeZone:"UTC",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){}
+  return '<br><span class="muted" style="font-size:12px">'+(b.status==="running"?'Sending to ':'Last sent to ')+esc(bcGroup(b))+(when?' · '+esc(when):'')+'</span>';
 }
 function linkPanel(sid,rows){
   var cur=(st.links||{})[sid]||"", draft=st.linkDraft[sid]!=null?st.linkDraft[sid]:cur, last=(st.lastBc||{})[sid], n=rows.length;
