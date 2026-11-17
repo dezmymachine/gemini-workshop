@@ -256,6 +256,13 @@ body.is-staff .topsearch{display:none}
 .schip{font-size:13px;font-weight:600;padding:5px 10px;border-radius:99px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
 .schip.off{background:var(--sunk);color:var(--muted);text-decoration:line-through}
 .cact{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.linkrow{display:flex;gap:10px;align-items:center}
+.linkrow input{flex:1;min-width:0}
+.linkrow .btn{flex:none}
+.sendrow{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.sendrow>label{font-weight:700;font-size:14px}
+#linkForm select{min-height:44px;border:1.5px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-weight:600;font-size:14px;color:var(--ink);max-width:100%}
+@media (max-width:560px){ .linkrow{flex-wrap:wrap} .linkrow .btn{width:100%;justify-content:center} }
 .cact select{min-height:42px;border:1.5px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);font-weight:600;font-size:14px;color:var(--ink);max-width:100%}
 .cact .or{color:var(--muted);font-size:14px}
 .ctable{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
@@ -985,17 +992,21 @@ function linkPanel(sid,rows){
   var interrupted=last && last.status==="running" && !sending, failedN=last && last.status==="done" && last.failed>0;
   var h='<form id="linkForm" class="panel" novalidate style="display:grid;gap:12px"><div style="display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between"><h3>Meeting link</h3><span class="pill'+(cur?'':' plain')+'">'+(cur?'Link set':'No link yet')+'</span></div>';
   if(st.linksErr) h+='<div class="notice err">Couldn\'t load saved links: '+esc(st.linksErr)+'</div>';
-  h+='<div class="field"><label for="linkUrl">Google Meet link</label><input id="linkUrl" type="url" inputmode="url" value="'+esc(draft)+'" placeholder="https://meet.google.com/abc-defg-hij" autocomplete="off"></div>'+
-    '<div class="btns"><button class="btn primary" type="submit"'+(anyBusy?' disabled':'')+'>'+(st.busy&&!ask?'Saving…':'Save link')+'</button>';
+  /* One coloured (primary) action at a time: Save while the link is new or edited, otherwise Send. */
+  var dirty=!cur || draft.trim()!==cur;
+  h+='<div class="field"><label for="linkUrl">Link (Google Meet or Teams)</label><div class="linkrow"><input id="linkUrl" type="url" inputmode="url" value="'+esc(draft)+'" placeholder="https://meet.google.com/abc-defg-hij" autocomplete="off">'+
+    '<button id="saveLinkBtn" class="btn'+(dirty?' primary':'')+'" type="submit"'+(anyBusy?' disabled':'')+'>'+(st.busy&&!ask?'Saving…':'Save link')+'</button></div>'+
+    (cur&&dirty?'<span class="hint">Save the changed link before sending it.</span>':'')+'</div>'+
+    '<div class="sendrow"><label for="bcAud">Send to booked students</label><div class="btns">';
   if(sending) h+='';
   else if(interrupted) h+='<button type="button" class="btn primary" data-act="resumeBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Resume sending</button>';
   else if(ask) h+='<span style="font-weight:700">Send the link to '+an+' student'+(an===1?'':'s')+' ('+AUD[aud].t+') by email?'+(rs?' Everyone in this group gets it again, as a reminder.':' Anyone who already has this link is skipped.')+'</span>'+
     '<label style="display:flex;gap:8px;align-items:center;font-size:14px;flex-basis:100%"><input type="checkbox" data-bcresend="'+esc(sid)+'"'+(rs?' checked':'')+(anyBusy?' disabled':'')+'> Send again as a reminder (also to students who already have this link)</label>'+
     '<button type="button" class="btn primary sm" data-act="doBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Yes, send now</button><button type="button" class="btn sm" data-act="noBroadcast">Cancel</button>';
-  else h+='<select aria-label="Send the link to" data-bcaud="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'><option value="all"'+(aud==="all"?' selected':'')+'>All booked ('+n+')</option><option value="ug"'+(aud==="ug"?' selected':'')+'>Undergraduates only ('+(n-pgN)+')</option><option value="pg"'+(aud==="pg"?' selected':'')+'>Postgraduates only ('+pgN+')</option></select>'+
-    '<button type="button" class="btn" data-act="askBroadcast" data-sid="'+esc(sid)+'"'+((!cur||!an||draft.trim()!==cur||anyBusy)?' disabled':'')+'>Send link</button>';
+  else h+='<select id="bcAud" data-bcaud="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'><option value="all"'+(aud==="all"?' selected':'')+'>All booked ('+n+')</option><option value="ug"'+(aud==="ug"?' selected':'')+'>Undergraduates only ('+(n-pgN)+')</option><option value="pg"'+(aud==="pg"?' selected':'')+'>Postgraduates only ('+pgN+')</option></select>'+
+    '<button type="button" class="btn'+(dirty?'':' primary')+'" data-act="askBroadcast" data-sid="'+esc(sid)+'"'+(an?'':' data-none="1"')+((!cur||!an||draft.trim()!==cur||anyBusy)?' disabled':'')+'>Send link</button>';
   if(failedN && !sending && !ask) h+='<button type="button" class="btn" data-act="retryBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Retry '+last.failed+' failed</button>';
-  h+='</div>';
+  h+='</div></div>';
   if(last && (sending || interrupted)){
     var done=last.sent+last.failed, pct=last.total?Math.round(done*100/last.total):0;
     h+='<div><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="'+last.total+'" aria-valuenow="'+done+'"><i style="width:'+pct+'%"></i></div>'+
@@ -1657,7 +1668,7 @@ document.addEventListener("input",function(e){
   if(t.id==="q"){ st.q=t.value; if(st.view!=="dash") st.view="dash"; render(); return; }
   if(t.id==="adminQ"){ st.adminQ=t.value; st.pg.search=1; render(); }
   if(t.dataset && t.dataset.flt){ st.asg.ask=null; var fp=t.dataset.flt.split("."); st[fp[0]][fp[1]]=t.value; if(fp[0]==="fs") st.pg.sessions=1; else { st.pg.roster=1; st.pg.search=1; st.pg.unbooked=1; resetUnbPages(); } render(); return; }
-  if(t.id==="linkUrl" && st.adminSession){ st.linkDraft[st.adminSession]=t.value; var ab=document.querySelector("[data-act=askBroadcast]"); if(ab) ab.disabled = !((st.links||{})[st.adminSession]) || t.value.trim()!==(st.links||{})[st.adminSession]; return; }
+  if(t.id==="linkUrl" && st.adminSession){ st.linkDraft[st.adminSession]=t.value; var ab=document.querySelector("[data-act=askBroadcast]"); var saved=(st.links||{})[st.adminSession]||"", dirty=!saved || t.value.trim()!==saved; if(ab){ ab.disabled = dirty || ab.dataset.none==="1"; ab.classList.toggle("primary", !dirty); } var sv=document.getElementById("saveLinkBtn"); if(sv) sv.classList.toggle("primary", dirty); return; }
   if(t.id==="rQ"){ st.asg.ask=null; st.rq=t.value; st.pg.roster=1; st.pg.unbooked=1; resetUnbPages(); render(); }
   if(t.dataset && t.dataset.asg){ if(t.checked) st.asg.sel[t.dataset.asg]=1; else delete st.asg.sel[t.dataset.asg]; st.asg.ask=null; render(); return; }
   if(t.dataset && t.dataset.asgall){ unbookedRows().forEach(function(r){ if(r.c!==t.dataset.asgall) return; var k=normIndex(r.i); if(t.checked) st.asg.sel[k]=1; else delete st.asg.sel[k]; }); st.asg.ask=null; render(); return; }
