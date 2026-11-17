@@ -630,7 +630,7 @@ function supaAPI(sb){
     setLink: function(sid,url){ return staffApi({action:"setLink",session_id:sid,url:url},"/api/sessions"); },
     assign: function(sid,nums){ return staffApi({session_id:sid,students:nums},"/api/assign"); },
     setClosed: function(sid,closed){ return staffApi({action:"setClosed",session_id:sid,closed:!!closed},"/api/sessions"); },
-    broadcastStart: function(sid){ return staffApi({action:"start",session_id:sid},"/api/broadcast"); },
+    broadcastStart: function(sid,aud){ return staffApi({action:"start",session_id:sid,audience:aud||"all"},"/api/broadcast"); },
     broadcastProcess: function(id){ return staffApi({action:"process",id:id},"/api/broadcast"); },
     broadcastRetry: function(id){ return staffApi({action:"retry",id:id},"/api/broadcast"); },
     notify: async function(kind){ try{ await staffApi({kind:kind||"confirm"},"/api/notify"); }catch(e){} },     /* emails the welcome / booking confirmation; never blocks the page */
@@ -971,6 +971,10 @@ async function setSessionClosed(sid,closed){
 function linkPanel(sid,rows){
   var cur=(st.links||{})[sid]||"", draft=st.linkDraft[sid]!=null?st.linkDraft[sid]:cur, last=(st.lastBc||{})[sid], n=rows.length;
   var ask=st.confirmBroadcast===sid, sending=st.bcRun===sid, anyBusy=st.busy||!!st.bcRun;
+  /* Who gets the link: everyone booked, or only undergraduates / only postgraduates. */
+  var pgN=rows.filter(function(x){ return isPG(x.r.l); }).length, aud=(st.bcAud||{})[sid]||"all";
+  var AUD={all:{n:n,t:"all booked students"},ug:{n:n-pgN,t:"undergraduates only"},pg:{n:pgN,t:"postgraduates only"}};
+  var an=AUD[aud].n;
   var interrupted=last && last.status==="running" && !sending, failedN=last && last.status==="done" && last.failed>0;
   var h='<form id="linkForm" class="panel" novalidate style="display:grid;gap:12px"><div style="display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between"><h3>Meeting link</h3><span class="pill'+(cur?'':' plain')+'">'+(cur?'Link set':'No link yet')+'</span></div>';
   if(st.linksErr) h+='<div class="notice err">Couldn\'t load saved links: '+esc(st.linksErr)+'</div>';
@@ -978,8 +982,9 @@ function linkPanel(sid,rows){
     '<div class="btns"><button class="btn primary" type="submit"'+(anyBusy?' disabled':'')+'>'+(st.busy&&!ask?'Saving…':'Save link')+'</button>';
   if(sending) h+='';
   else if(interrupted) h+='<button type="button" class="btn primary" data-act="resumeBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Resume sending</button>';
-  else if(ask) h+='<span style="font-weight:700">Send the link to '+n+' student'+(n===1?'':'s')+' by email?</span><button type="button" class="btn primary sm" data-act="doBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Yes, send now</button><button type="button" class="btn sm" data-act="noBroadcast">Cancel</button>';
-  else h+='<button type="button" class="btn" data-act="askBroadcast" data-sid="'+esc(sid)+'"'+((!cur||!n||draft.trim()!==cur||anyBusy)?' disabled':'')+'>Send link to booked students</button>';
+  else if(ask) h+='<span style="font-weight:700">Send the link to '+an+' student'+(an===1?'':'s')+' ('+AUD[aud].t+') by email? Anyone who already has this link is skipped.</span><button type="button" class="btn primary sm" data-act="doBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Yes, send now</button><button type="button" class="btn sm" data-act="noBroadcast">Cancel</button>';
+  else h+='<select aria-label="Send the link to" data-bcaud="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'><option value="all"'+(aud==="all"?' selected':'')+'>All booked ('+n+')</option><option value="ug"'+(aud==="ug"?' selected':'')+'>Undergraduates only ('+(n-pgN)+')</option><option value="pg"'+(aud==="pg"?' selected':'')+'>Postgraduates only ('+pgN+')</option></select>'+
+    '<button type="button" class="btn" data-act="askBroadcast" data-sid="'+esc(sid)+'"'+((!cur||!an||draft.trim()!==cur||anyBusy)?' disabled':'')+'>Send link</button>';
   if(failedN && !sending && !ask) h+='<button type="button" class="btn" data-act="retryBroadcast" data-sid="'+esc(sid)+'"'+(anyBusy?' disabled':'')+'>Retry '+last.failed+' failed</button>';
   h+='</div>';
   if(last && (sending || interrupted)){
@@ -987,13 +992,13 @@ function linkPanel(sid,rows){
     h+='<div><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="'+last.total+'" aria-valuenow="'+done+'"><i style="width:'+pct+'%"></i></div>'+
       '<span style="font-size:14px">'+(sending?'Sending in batches of 100. Sent '+last.sent+' of '+last.total+(last.failed?' ('+last.failed+' failed)':'')+'. Keep this page open.':'Sending was interrupted: '+last.sent+' of '+last.total+' sent. Resume to send the rest.')+'</span></div>';
   } else {
-    if(last) h+='<span class="muted" style="font-size:14px">Last sent '+esc(new Date(last.at).toLocaleString("en-GB",{timeZone:"UTC",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))+' (Ghana time): '+last.sent+' of '+last.total+' sent'+(last.failed?', '+last.failed+' failed':'')+'.</span>';
+    if(last) h+='<span class="muted" style="font-size:14px">Last sent '+esc(new Date(last.at).toLocaleString("en-GB",{timeZone:"UTC",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))+' (Ghana time) to '+({ug:'undergraduates',pg:'postgraduates'}[last.audience]||'all booked')+': '+last.sent+' of '+last.total+' sent'+(last.failed?', '+last.failed+' failed':'')+'.</span>';
   }
   return h+'</form>';
 }
 /* Sends a broadcast one batch at a time (the server sends 100 per call) and shows live progress. */
 async function runBroadcast(sid,b){
-  var keep=function(x){ st.lastBc[sid]={id:x.id,at:x.at||new Date().toISOString(),total:x.total,sent:x.sent,failed:x.failed,status:x.status}; };
+  var keep=function(x){ var prev=st.lastBc[sid]||{}; st.lastBc[sid]={id:x.id,at:x.at||prev.at||new Date().toISOString(),total:x.total,sent:x.sent,failed:x.failed,status:x.status,audience:x.audience||(prev.id===x.id?prev.audience:"all"),already:x.already!=null?x.already:(prev.id===x.id?prev.already:0)}; };
   st.bcRun=sid; st.msg=null; st.confirmBroadcast=null; keep(b); render();
   var prev=-1, stall=0, first=true;
   try{
@@ -1002,7 +1007,8 @@ async function runBroadcast(sid,b){
       b=await API.broadcastProcess(b.id); keep(b); render();
       var d=b.sent+b.failed; stall = d===prev ? stall+1 : 0; prev=d; if(stall>=5) break;
     }
-    if(b.status==="done") st.msg={err:b.sent===0,text:"Finished: "+b.sent+" of "+b.total+" student"+(b.total===1?"":"s")+" reached."+(b.failed?" "+b.failed+" could not be sent. Use Retry to try them again.":"")};
+    var al=(st.lastBc[sid]||{}).already||0;
+    if(b.status==="done") st.msg={err:b.sent===0,text:"Finished: "+b.sent+" of "+b.total+" student"+(b.total===1?"":"s")+" reached."+(al?" "+al+" already had this link and were skipped.":"")+(b.failed?" "+b.failed+" could not be sent. Use Retry to try them again.":"")};
     else st.msg={err:true,text:"Sending paused at "+b.sent+" of "+b.total+". Press Resume sending to continue."};
   }catch(err){ st.msg={err:true,text:err.message+" Press Resume sending to continue."}; }
   st.bcRun=null; render(); window.scrollTo(0,0);
@@ -1607,7 +1613,7 @@ document.addEventListener("click",async function(e){
     var bsid=b.dataset.sid; if(st.bcRun) return;
     try{
       st.bcRun=bsid; render();                                /* shows the buttons as busy while the queue is prepared */
-      var start = a==="doBroadcast" ? await API.broadcastStart(bsid) : a==="retryBroadcast" ? await API.broadcastRetry(st.lastBc[bsid].id) : st.lastBc[bsid];
+      var start = a==="doBroadcast" ? await API.broadcastStart(bsid,(st.bcAud||{})[bsid]||"all") : a==="retryBroadcast" ? await API.broadcastRetry(st.lastBc[bsid].id) : st.lastBc[bsid];
       st.bcRun=null; return runBroadcast(bsid,start);
     }catch(err){ st.bcRun=null; st.confirmBroadcast=null; st.msg={err:true,text:err.message}; render(); window.scrollTo(0,0); return; }
   }
@@ -1645,6 +1651,7 @@ document.addEventListener("input",function(e){
   if(t.id==="rQ"){ st.asg.ask=null; st.rq=t.value; st.pg.roster=1; st.pg.unbooked=1; resetUnbPages(); render(); }
   if(t.dataset && t.dataset.asg){ if(t.checked) st.asg.sel[t.dataset.asg]=1; else delete st.asg.sel[t.dataset.asg]; st.asg.ask=null; render(); return; }
   if(t.dataset && t.dataset.asgall){ unbookedRows().forEach(function(r){ if(r.c!==t.dataset.asgall) return; var k=normIndex(r.i); if(t.checked) st.asg.sel[k]=1; else delete st.asg.sel[k]; }); st.asg.ask=null; render(); return; }
+  if(t.dataset && t.dataset.bcaud){ st.bcAud=st.bcAud||{}; st.bcAud[t.dataset.bcaud]=t.value; st.confirmBroadcast=null; render(); return; }
   if(t.dataset && t.dataset.asgpick){ st.asg.pick[t.dataset.asgpick]=t.value; st.asg.ask=null; render(); return; }
 });
 document.addEventListener("submit",function(e){

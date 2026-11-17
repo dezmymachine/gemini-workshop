@@ -303,7 +303,8 @@ create table public.session_broadcasts (
   failed     int not null default 0,
   total      int not null default 0,
   url        text,
-  status     text not null default 'done' check (status in ('running', 'done'))
+  status     text not null default 'done' check (status in ('running', 'done')),
+  audience   text not null default 'all' check (audience in ('all', 'ug', 'pg'))   -- all booked / undergraduates / postgraduates
 );
 create index session_broadcasts_session_idx on public.session_broadcasts(session_id, sent_at desc);
 

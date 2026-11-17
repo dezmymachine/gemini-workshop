@@ -157,6 +157,7 @@ The code is in `api/_mail.js` (provider and templates), `api/_send.js` (who gets
 - **Booking after the link went out:** a new booking's confirmation carries the link. A student who joins a session after its link was
   broadcast and has not had that link (for example they left the session and came back) is emailed the link straight away, once;
   the daily job catches anyone missed. Each message records the link it carried (`email_log.link_url`, migration `009`).
+- **Send the link to one group:** on a session page, choose All booked, Undergraduates only or Postgraduates only before Send link. Anyone already sent that exact link for that session is skipped, so nobody gets it twice (migration `010`).
 - **Nothing is sent twice:** every message has a key (queue row, or kind + student + session). Each send is claimed in the database first,
   and Resend's `Idempotency-Key` stops a retried request from going out twice.
 - **Rate limits / outages:** each Resend request is retried up to 3 times (about 1, 2, 3 s apart, or what `Retry-After` says) before the message
@@ -181,7 +182,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://www.kecworkshops.com/api/re
 
 It returns `sent`, `failed`, `remaining` (confirmations/reminders left for the next run), `welcomed` and `welcomeRemaining`.
 
-Database: run the files in `supabase/migrations/` in order once (`002` to `009`); a brand-new project gets everything from `schema.sql`.
+Database: run the files in `supabase/migrations/` in order once (`002` to `010`); a brand-new project gets everything from `schema.sql`.
 The tables `email_queue` and `email_log` hold the messages. Phone numbers are still collected at registration (they appear in the CSV)
 but are no longer used for messages.
 

@@ -10,10 +10,10 @@ module.exports = async (req, res) => {
     if (body.action === 'list') {
       const { data: links, error } = await admin.from('session_links').select('session_id, url');
       if (error) throw error;
-      const { data: bc, error: e2 } = await admin.from('session_broadcasts').select('id, session_id, sent_at, total, sent, failed, status').order('id', { ascending: false }).limit(2000);
+      const { data: bc, error: e2 } = await admin.from('session_broadcasts').select('id, session_id, sent_at, total, sent, failed, status, audience').order('id', { ascending: false }).limit(2000);
       if (e2) throw e2;
       const last = {};
-      (bc || []).forEach((r) => { if (!last[r.session_id]) last[r.session_id] = { id: r.id, at: r.sent_at, total: r.total, sent: r.sent, failed: r.failed, status: r.status, pending: Math.max(0, r.total - r.sent - r.failed) }; });
+      (bc || []).forEach((r) => { if (!last[r.session_id]) last[r.session_id] = { id: r.id, at: r.sent_at, total: r.total, sent: r.sent, failed: r.failed, status: r.status, audience: r.audience || 'all', pending: Math.max(0, r.total - r.sent - r.failed) }; });
       const out = {}; (links || []).forEach((l) => { out[l.session_id] = l.url; });
       const { data: cl } = await admin.from('sessions').select('id').eq('closed', true);
       const closed = {}; (cl || []).forEach((r) => { closed[r.id] = true; });
