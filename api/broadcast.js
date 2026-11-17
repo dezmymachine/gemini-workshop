@@ -3,7 +3,8 @@
 //   start   {session_id, audience}  queue one message per booked student (or return the one already in progress);
 //           audience: 'all' (default), 'ug' = undergraduates only, 'pg' = postgraduates only.
 //           Nobody is sent the same link for the same session twice: anyone who already received this exact link
-//           (an earlier broadcast, a booking confirmation, or a "here is your link" email) is skipped.
+//           (an earlier broadcast, a booking confirmation, or a "here is your link" email) is skipped,
+//           unless resend: true (staff ticked "Send again as a reminder"), which sends to everyone in the group.
 //   process {id}          send the next batch and return progress
 //   retry   {id}          put failed messages back in the queue
 const { bad, bodyOf, requireStaff } = require('./_lib');
@@ -34,6 +35,7 @@ module.exports = async (req, res) => {
     if (action !== 'start') return bad(res, 400, 'Unknown action.');
     const sid = String(body.session_id || '');
     const audience = ['ug', 'pg'].includes(body.audience) ? body.audience : 'all';
+    const resend = body.resend === true;
     const wanted = (lv) => audience === 'all' || (audience === 'pg') === /^Postgraduate/.test(lv || '');
     const { data: s } = await admin.from('sessions').select('id').eq('id', sid).maybeSingle();
     if (!s) return bad(res, 400, 'Unknown session.');
@@ -51,16 +53,18 @@ module.exports = async (req, res) => {
 
     // Who already has this exact link for this session (so they are not emailed it again).
     const has = new Set();
-    for (let from = 0; ; from += 1000) {
+    for (let from = 0; !resend; from += 1000) {
       const { data, error } = await admin.from('email_queue').select('student_id, session_broadcasts!inner(session_id, url)')
         .eq('status', 'sent').eq('session_broadcasts.session_id', sid).eq('session_broadcasts.url', lk.url).order('id').range(from, from + 999);
       if (error) throw error;
       (data || []).forEach((r) => has.add(r.student_id));
       if (!data || data.length < 1000) break;
     }
-    const { data: logged, error: e0 } = await admin.from('email_log').select('student_id').eq('session_id', sid).eq('link_url', lk.url).not('channel', 'is', null);
-    if (e0) throw e0;
-    (logged || []).forEach((r) => has.add(r.student_id));
+    if (!resend) {
+      const { data: logged, error: e0 } = await admin.from('email_log').select('student_id').eq('session_id', sid).eq('link_url', lk.url).not('channel', 'is', null);
+      if (e0) throw e0;
+      (logged || []).forEach((r) => has.add(r.student_id));
+    }
 
     const people = []; let already = 0;
     for (let from = 0; ; from += 1000) {
@@ -70,7 +74,7 @@ module.exports = async (req, res) => {
       if (!data || data.length < 1000) break;
     }
     if (!people.length) {
-      if (already) return bad(res, 400, 'Everyone in this group (' + GROUP[audience] + ') has already been sent this link (' + already + ' student' + (already === 1 ? '' : 's') + '). Nobody was emailed again.');
+      if (already) return bad(res, 400, 'Everyone in this group (' + GROUP[audience] + ') has already been sent this link (' + already + ' student' + (already === 1 ? '' : 's') + '). Nobody was emailed again. To send it again as a reminder, press Send link and tick "Send again as a reminder".');
       return bad(res, 400, audience === 'all' ? 'No one has booked this session yet.' : 'No ' + (audience === 'pg' ? 'postgraduate' : 'undergraduate') + ' students have booked this session.');
     }
 
