@@ -171,6 +171,8 @@ a{text-decoration:none}
 .notice{border:1px solid var(--line);background:var(--sunk);border-radius:var(--r);padding:12px 14px;font-size:14px}
 .notice.err{background:var(--full-soft);border-color:transparent;color:var(--full)}
 .notice.ok{background:var(--accent-soft);border-color:transparent}
+.offbar{position:fixed;left:12px;right:12px;bottom:12px;z-index:80;max-width:560px;margin:0 auto;background:var(--full);color:#fff;border-radius:var(--r);padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.offbar[hidden]{display:none}
 
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;align-items:start}
@@ -437,6 +439,10 @@ function userErr(m){ var e=new Error(m); e.user=true; return e; }
    Instead of showing an error straight away (and students hammering the button), wait and try again a few
    times, waiting longer each time plus a random bit so thousands of phones don't retry in step. */
 var BUSY_MSG="Lots of students are using the site right now. Please wait a moment and try again.";
+/* The browser could not reach the site at all: nearly always the student's own connection, not a busy site. */
+var OFFLINE_MSG="You seem to be offline. Check your internet connection and try again.";
+function isOffline(){ return typeof navigator!=="undefined" && navigator.onLine===false; }
+function errText(err,fallback){ return err&&err.user ? err.message : (isOffline() ? OFFLINE_MSG : fallback); }
 function retryable(status){ return !status || status===429 || status>=500; }
 async function fetchRetry(url,opts,tries){
   tries=tries||4;
@@ -502,7 +508,8 @@ function supaAPI(sb){
     if(/Email not confirmed/i.test(m)) return userErr("Please confirm your email first. Check your inbox for the link we sent.");
     if(/already registered|already been registered|User already/i.test(m)) return userErr("That email is already registered. Sign in instead.");
     if(/Database error saving new user/i.test(m)) return userErr("We couldn't save your registration. Check your details and try again.");
-    if(/rate limit|too many requests|Failed to fetch|NetworkError|timeout|503|504/i.test(m)) return userErr(BUSY_MSG);
+    if(isOffline() || /Failed to fetch|NetworkError|Load failed|network request failed|Network connection was lost/i.test(m)) return userErr(OFFLINE_MSG);
+    if(/rate limit|too many requests|timeout|503|504/i.test(m)) return userErr(BUSY_MSG);
     if(/Password should be/i.test(m)) return userErr("Choose a password with at least 6 characters.");
     return userErr(m);
   }
@@ -1379,7 +1386,7 @@ async function submitIn(){
   if(!key||!A.in.pw){ A.msg={err:true,text:"Enter your student number and password."}; render(); return; }
   A.busy=true; A.msg=null; render();
   try{ var r=await API.signIn(A.in.index.trim(),A.in.pw); signedIn(r,""); st.view="dash"; st.msg=null; render(); window.scrollTo(0,0); if(API.notify) API.notify("welcome"); return; }
-  catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't sign in right now. Check your connection and try again."}; }
+  catch(err){ A.msg={err:true,text:errText(err,"Couldn't sign in right now. Check your connection and try again.")}; }
   A.busy=false; render();
 }
 var EMAIL_RE=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -1411,7 +1418,7 @@ async function submitUp(){
     var r=await API.createAccount({key:key,index:f.index.trim(),name:f.name.trim(),email:email,phone:normPhone(f.phone),college:f.college,programme:f.programme.trim(),level:f.level,pw:f.pw});
     signedIn(r,""); st.view="dash"; st.msg={text:"You're registered. Now choose your session below."}; render(); toList(); if(API.notify) API.notify("welcome"); return;
   }catch(err){
-    A.msg={err:!err.info,text:err.user?err.message:"Couldn't complete your registration. Check your connection and try again."};
+    A.msg={err:!err.info,text:errText(err,"Couldn't complete your registration. Check your connection and try again.")};
     if(err.info){ A.tab="in"; A.step=1; A.in.index=f.index; A.up=BLANKUP(); }
     else if(err.user && /email/i.test(err.message) && !/student number/i.test(err.message)){ A.step=1; }   /* problem is on step 1 */
   }
@@ -1447,7 +1454,7 @@ async function submitStaffIn(){
   if(!email||!A.st.pw){ A.msg={err:true,text:"Enter your email and password."}; render(); return; }
   A.busy=true; A.msg=null; render();
   try{ var u=await API.staffSignIn(email,A.st.pw); staffSignedIn(u,""); await loadAdmin(); render(); return; }
-  catch(err){ A.msg={err:true,text:err.user?err.message:"Couldn't sign in right now."}; }
+  catch(err){ A.msg={err:true,text:errText(err,"Couldn't sign in right now.")}; }
   A.busy=false; render();
 }
 async function loadAdmin(){
@@ -1498,7 +1505,7 @@ async function saveStaffForm(){
     var h=F.pw||"";
     await API.saveStaff(staffAuthObj(),{name:F.name.trim(),email:email,role:F.role,college:F.college,h:h});
     st.msg={text:(F.edit?"Saved changes for ":"Added ")+F.name.trim()+" as "+ROLES[F.role]+"."}; st.staffForm=null; st.busy=false; await loadStaff(); return;
-  }catch(err){ st.msg={err:true,text:err.user?err.message:"Couldn't save. Please try again."}; }
+  }catch(err){ st.msg={err:true,text:errText(err,"Couldn't save. Please try again.")}; }
   st.busy=false; render();
 }
 
@@ -1668,7 +1675,7 @@ async function submitBook(){
     var res=await API.register(payloadFor(b,sid,gsid));
     st.booking=res; st.pick=null; st.view="mine"; st.msg={text:"You're booked for "+longLabel(s)+"."};
     st.busy=false; render(); window.scrollTo(0,0); if(API.notify) API.notify(); if(API.refresh) API.refresh(true); return;
-  }catch(err){ st.sheetMsg={err:true,text:err.user?err.message:"Couldn't save your booking. Check your connection and try again."}; if(API&&API.refresh) API.refresh(true); }
+  }catch(err){ st.sheetMsg={err:true,text:errText(err,"Couldn't save your booking. Check your connection and try again.")}; if(API&&API.refresh) API.refresh(true); }
   st.busy=false; render();
 }
 async function dropSeat(sid){
@@ -1677,7 +1684,7 @@ async function dropSeat(sid){
   try{
     var res=await API.register(payloadFor(b, s.g?b.s:"", s.g?"":b.g));
     st.booking=res; st.msg={text:"Your seat in "+longLabel(s)+" was released."};
-  }catch(err){ st.msg={err:true,text:err.user?err.message:"Couldn't change your booking right now. Please try again."}; }
+  }catch(err){ st.msg={err:true,text:errText(err,"Couldn't change your booking right now. Please try again.")}; }
   st.busy=false; st.confirmDrop=null; render();
 }
 async function downloadCSV(){
@@ -1736,6 +1743,17 @@ async function boot(){
   try{ await sb.auth.getSession(); }catch(e){}      /* lets a password-reset link in the address finish being read */
   await restore(); if(st.staff) st.adminSession=qsSession(); st.ready=true; render();
 }
+/* Offline bar: shown while the phone has no connection (outside render(), so it also shows on the sign-in screens).
+   When the connection comes back, the seat counts are refreshed straight away. */
+(function(){
+  var bar=document.createElement("div"); bar.className="offbar"; bar.setAttribute("role","status"); bar.hidden=true;
+  bar.textContent="You're offline. Booking will work again once your connection is back.";
+  document.body.appendChild(bar);
+  function sync(){ bar.hidden=!isOffline(); }
+  window.addEventListener("offline", sync);
+  window.addEventListener("online", function(){ sync(); if(API && API.refresh) API.refresh(true); });
+  sync();
+})();
 boot();
 })();
 </script>
