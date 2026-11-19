@@ -137,6 +137,8 @@ What the code already does to stay fast:
 - **Close a session to new bookings:** on that session's page, **Bookings → Close this session** (super admins and organisers).
   Nobody can book or switch into it until you press **Reopen for booking**; students already booked keep their seat, link and reminders
   and can still change or cancel. The database enforces it (`book_session` raises `SESSION_CLOSED`, migration `008`).
+- **Create an open session (every college can book it):** Registrations → **Create session**: title, date, start and end time (Ghana time), seats. Students see it under "Open sessions" and can book one in addition to their college session. Its page has the usual Close, Meeting link and Send link panels, and **Delete session** while nobody has booked it (migration `011`).
+- **Email chosen colleges:** **Emails** in the staff menu (super admins and organisers). Tick the colleges, choose everyone / booked / not booked yet, write a subject and message, optionally a button (text + https link), check the preview and send. It goes out in batches of 100 with a progress bar; **Sent emails** lists past sends with Resume / Retry failed, and the daily job finishes anything left half-sent.
 - **Send the link to everyone booked on a session:** on that session's page click
   **Send link to booked students** and confirm.
   You can press it again after changing a link.
@@ -182,7 +184,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://www.kecworkshops.com/api/re
 
 It returns `sent`, `failed`, `remaining` (confirmations/reminders left for the next run), `welcomed` and `welcomeRemaining`.
 
-Database: run the files in `supabase/migrations/` in order once (`002` to `010`); a brand-new project gets everything from `schema.sql`.
+Database: run the files in `supabase/migrations/` in order once (`002` to `011`); a brand-new project gets everything from `schema.sql`.
 The tables `email_queue` and `email_log` hold the messages. Phone numbers are still collected at registration (they appear in the CSV)
 but are no longer used for messages.
 

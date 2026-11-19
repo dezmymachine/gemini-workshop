@@ -31,7 +31,7 @@ function when(s) {
   const hm = (d) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
   return { day, time: hm(a) + '-' + hm(b) };
 }
-function label(s) { return s.grasag ? 'GRASAG Session' : (TRACK_CODE[s.track] || s.track) + ' ' + s.title; }
+function label(s) { return s.grasag ? 'GRASAG Session' : s.track === 'open' ? 'Open session: ' + s.title : (TRACK_CODE[s.track] || s.track) + ' ' + s.title; }
 
 // ---------- Messages: a subject, a plain-text version and a simple HTML version ----------
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -69,6 +69,11 @@ const templates = {
     [`Hi ${name}, you registered for the Gemini Workshop but had not chosen a session, so the organisers have given you a seat: ${sessionLine(s)}.`,
      link ? { link } : NOLINK,
      'If this time does not suit you, sign in with your student number and password to change to another session.']),
+  // A message staff wrote on the Emails page (api/campaign.js): their subject and text, and an optional button.
+  // Each line of the message becomes its own paragraph; everything is escaped by compose().
+  announce: (name, c) => compose(c.subject,
+    [`Hi ${name},`, ...String(c.body || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean),
+     ...(c.cta_url ? [{ link: c.cta_url, button: c.cta_label || 'Open', text: c.cta_label || 'Link' }] : [])]),
   // For students who registered but have not chosen a session (tools/nudge-unbooked.js).
   nudge: (name, site) => compose('Choose your Gemini Workshop session',
     [`Hi ${name}, you registered for the Gemini Workshop but you have not chosen a session yet.`,

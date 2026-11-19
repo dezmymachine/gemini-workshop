@@ -1,7 +1,7 @@
 // Runs once a day (see vercel.json "crons"). Vercel calls it with "Authorization: Bearer <CRON_SECRET>".
 //  1. Sends a reminder to everyone booked on a session that happens tomorrow (Ghana time = UTC).
 //  2. Safety net: sends any booking confirmation that was missed (for example a student closed the tab).
-//  3. Finishes any link broadcast that was left half-sent.
+//  3. Finishes any link broadcast, and any Emails-page campaign, that was left half-sent.
 //  4. Safety net: sends the joining link to anyone booked after their session's link was broadcast who never got it
 //     (normally sent straight away by api/notify.js; this catches a closed tab or a failed send).
 //  5. Safety net: sends the registration (welcome) email to students who have not booked and never got it.
@@ -10,6 +10,7 @@
 const { adminClient } = require('./_lib');
 const send = require('./_send');
 const queue = require('./_queue');
+const camp = require('./_campaign');
 const linkMail = require('./_links');
 
 const BUDGET_MS = 45000; // stay inside the 60 s limit set in vercel.json; anything left is picked up next run (nothing is sent twice)
@@ -95,6 +96,18 @@ module.exports = async (req, res) => {
       }
     }
 
+    // Same for an Emails-page campaign left half-sent.
+    let campaignsFinished = 0;
+    const { data: openC, error: eC } = await admin.from('campaigns').select('id').eq('status', 'running').order('id');
+    if (!eC) for (const c of openC || []) {
+      for (;;) {
+        if (Date.now() - started > BUDGET_MS) break;
+        const p = await camp.processBatch(admin, c.id);
+        if (!p || p.status === 'done') { campaignsFinished++; break; }
+        await sleep(600);
+      }
+    }
+
     // Joining link for students who joined a session after its link was broadcast and never got it.
     let linksSent = 0, linksLeft = 0;
     const { data: bcs } = await admin.from('session_broadcasts').select('session_id, url');
@@ -142,7 +155,7 @@ module.exports = async (req, res) => {
 
     const { data: tmr } = await admin.from('sessions').select('id').gte('starts_at', tomorrow.from).lt('starts_at', tomorrow.to);
     const missing = (tmr || []).map((s) => s.id).filter((id) => !link[id]);
-    return res.status(200).json({ ok: true, sent, failed, remaining, broadcastsFinished: resumed, linksSent, linksRemaining: linksLeft, welcomed, welcomeRemaining: welcomeLeft, sessionsMissingLink: missing });
+    return res.status(200).json({ ok: true, sent, failed, remaining, broadcastsFinished: resumed, campaignsFinished, linksSent, linksRemaining: linksLeft, welcomed, welcomeRemaining: welcomeLeft, sessionsMissingLink: missing });
   } catch (e) {
     return res.status(500).json({ error: (e && e.message) || 'Something went wrong.' });
   }

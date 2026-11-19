@@ -10,9 +10,10 @@ function channelFor(student) {
   return okEmail && mail.configured() ? 'email' : 'none';
 }
 
-// The message for one student. kind: welcome | confirm | reminder | broadcast.
+// The message for one student. kind: welcome | confirm | reminder | broadcast | assigned | announce.
 function build(kind, it) {
   if (kind === 'welcome') return mail.templates.welcome(it.name);
+  if (kind === 'announce') return mail.templates.announce(it.name, it.campaign);
   return mail.templates[kind](it.name, it.session, it.link);
 }
 

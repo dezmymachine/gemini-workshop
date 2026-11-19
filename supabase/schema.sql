@@ -6,6 +6,8 @@
 -- =====================================================================
 
 drop trigger if exists on_auth_user_created on auth.users;
+drop table if exists public.campaign_queue cascade;
+drop table if exists public.campaigns cascade;
 drop table if exists public.email_queue cascade;
 drop table if exists public.session_broadcasts cascade;
 drop table if exists public.email_log cascade;
@@ -108,10 +110,10 @@ create table public.staff (
 
 create table public.bookings (
   student_id uuid not null references public.students(user_id) on delete cascade,
-  kind       text not null check (kind in ('college', 'grasag')),
+  kind       text not null check (kind in ('college', 'grasag', 'open')),   -- open: a staff-created session any college can book
   session_id text not null references public.sessions(id),
   created_at timestamptz not null default now(),
-  primary key (student_id, kind)                -- one college seat + one GRASAG seat per student
+  primary key (student_id, kind)                -- one college seat + one GRASAG seat + one open-session seat per student
 );
 create index bookings_session_idx on public.bookings(session_id);
 create index students_college_idx on public.students(college);
@@ -182,7 +184,6 @@ language plpgsql security definer set search_path = public as $$
 declare
   me      students;
   ss      sessions;
-  other   sessions;
   k       text;
   cur_sid text;
 begin
@@ -192,7 +193,7 @@ begin
 
   select * into ss from sessions where id = p_session;
   if not found then raise exception 'NO_SESSION'; end if;
-  k := case when ss.grasag then 'grasag' else 'college' end;
+  k := case when ss.grasag then 'grasag' when ss.track = 'open' then 'open' else 'college' end;
 
   -- Serialise this student's own bookings, then lock the old and new session rows
   -- in id order so two students swapping seats can never deadlock each other.
@@ -206,13 +207,14 @@ begin
 
   if ss.grasag then
     if me.level not like 'Postgraduate%' then raise exception 'NOT_POSTGRAD'; end if;
-  elsif not exists (select 1 from colleges c where c.id = me.college and c.track = ss.track) then
+  elsif ss.track <> 'open' and not exists (select 1 from colleges c where c.id = me.college and c.track = ss.track) then
     raise exception 'WRONG_COLLEGE';
   end if;
 
-  select s.* into other from bookings b join sessions s on s.id = b.session_id
-   where b.student_id = me.user_id and b.kind <> k;
-  if other.id is not null and other.starts_at < ss.ends_at and ss.starts_at < other.ends_at then
+  -- No overlap with any other seat the student holds.
+  if exists (select 1 from bookings b join sessions s on s.id = b.session_id
+              where b.student_id = me.user_id and b.kind <> k
+                and s.starts_at < ss.ends_at and ss.starts_at < s.ends_at) then
     raise exception 'CLASH';
   end if;
 
@@ -351,6 +353,53 @@ language sql security definer set search_path = public as $$
 $$;
 revoke execute on function public.claim_email_batch(bigint, int) from public, anon, authenticated;
 grant  execute on function public.claim_email_batch(bigint, int) to service_role;
+
+-- ---------- Email campaigns: staff send a message (optional button) to chosen colleges ----------
+create table public.campaigns (
+  id         bigserial primary key,
+  sent_by    uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  subject    text not null,
+  body       text not null,
+  cta_label  text,
+  cta_url    text,
+  colleges   text[] not null,
+  filter     text not null default 'all' check (filter in ('all', 'booked', 'unbooked')),
+  total      int not null default 0,
+  sent       int not null default 0,
+  failed     int not null default 0,
+  status     text not null default 'running' check (status in ('running', 'done'))
+);
+
+create table public.campaign_queue (
+  id          bigserial primary key,
+  campaign_id bigint not null references public.campaigns(id) on delete cascade,
+  student_id  uuid references public.students(user_id) on delete cascade,
+  to_email    text,
+  name        text not null,
+  status      text not null default 'pending' check (status in ('pending', 'sending', 'sent', 'failed')),
+  attempts    int  not null default 0,
+  claimed_at  timestamptz,
+  sent_at     timestamptz
+);
+create index campaign_queue_progress_idx on public.campaign_queue(campaign_id, status);
+
+alter table public.campaigns      enable row level security;   -- no policies: only the server can touch them
+alter table public.campaign_queue enable row level security;
+
+create or replace function public.claim_campaign_batch(p_campaign bigint, p_n int) returns setof public.campaign_queue
+language sql security definer set search_path = public as $$
+  update campaign_queue q
+     set status = 'sending', attempts = q.attempts + 1, claimed_at = now()
+   where q.id in (
+     select id from campaign_queue
+      where campaign_id = p_campaign and attempts < 3
+        and (status = 'pending' or (status = 'sending' and claimed_at < now() - interval '2 minutes'))
+      order by id limit p_n for update skip locked)
+  returning q.*;
+$$;
+revoke execute on function public.claim_campaign_batch(bigint, int) from public, anon, authenticated;
+grant  execute on function public.claim_campaign_batch(bigint, int) to service_role;
 
 -- No insert/update/delete policies anywhere: links and logs only change through the server functions (service role).
 -- email_log and session_broadcasts have no policies at all, so only the server can read them.

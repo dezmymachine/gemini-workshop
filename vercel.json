@@ -50,6 +50,9 @@
     },
     "api/assign.js": {
       "maxDuration": 30
+    },
+    "api/campaign.js": {
+      "maxDuration": 30
     }
   }
 }
