@@ -74,6 +74,10 @@ const templates = {
   announce: (name, c) => compose(c.subject,
     [`Hi ${name},`, ...String(c.body || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean),
      ...(c.cta_url ? [{ link: c.cta_url, button: c.cta_label || 'Open', text: c.cta_label || 'Link' }] : [])]),
+  // Code that proves the student owns the new address before their email is changed (api/profile.js).
+  emailCode: (name, code) => compose(`Your Gemini Workshop email change code: ${code}`,
+    [`Hi ${name}, use this code to confirm your new email address for the Gemini Workshop:`, String(code),
+     'It expires in 15 minutes. If you did not ask to change your email, ignore this message: nothing will change.']),
   // For students who registered but have not chosen a session (tools/nudge-unbooked.js).
   nudge: (name, site) => compose('Choose your Gemini Workshop session',
     [`Hi ${name}, you registered for the Gemini Workshop but you have not chosen a session yet.`,

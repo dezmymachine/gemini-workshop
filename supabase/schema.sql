@@ -6,6 +6,7 @@
 -- =====================================================================
 
 drop trigger if exists on_auth_user_created on auth.users;
+drop table if exists public.email_changes cascade;
 drop table if exists public.campaign_queue cascade;
 drop table if exists public.campaigns cascade;
 drop table if exists public.email_queue cascade;
@@ -353,6 +354,18 @@ language sql security definer set search_path = public as $$
 $$;
 revoke execute on function public.claim_email_batch(bigint, int) from public, anon, authenticated;
 grant  execute on function public.claim_email_batch(bigint, int) to service_role;
+
+-- ---------- Email change: a student corrects their email, checked with a 6-digit code (api/profile.js) ----------
+create table public.email_changes (
+  user_id    uuid primary key references public.students(user_id) on delete cascade,
+  new_email  text not null,
+  code_hash  text not null,            -- sha256 of code + user id; the code itself is never stored
+  expires_at timestamptz not null,     -- 15 minutes after the code was sent
+  attempts   int not null default 0,   -- wrong codes typed (max 5)
+  sent_count int not null default 1,   -- codes sent in the current hour (max 3)
+  created_at timestamptz not null default now()
+);
+alter table public.email_changes enable row level security;   -- no policies: only the server can read or write it
 
 -- ---------- Email campaigns: staff send a message (optional button) to chosen colleges ----------
 create table public.campaigns (

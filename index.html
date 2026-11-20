@@ -672,6 +672,7 @@ function supaAPI(sb){
     campaignProcess: function(id){ return staffApi({action:"process",id:id},"/api/campaign"); },
     campaignRetry: function(id){ return staffApi({action:"retry",id:id},"/api/campaign"); },
     campaignList: function(){ return staffApi({action:"list"},"/api/campaign"); },
+    profile: function(action,body){ return staffApi(Object.assign({action:action},body||{}),"/api/profile"); },
     broadcastStart: function(sid,aud,resend){ return staffApi({action:"start",session_id:sid,audience:aud||"all",resend:!!resend},"/api/broadcast"); },
     broadcastProcess: function(id){ return staffApi({action:"process",id:id},"/api/broadcast"); },
     broadcastRetry: function(id){ return staffApi({action:"retry",id:id},"/api/broadcast"); },
@@ -858,8 +859,58 @@ function renderProfile(){
   return msgHTML()+'<div class="sec-head"><div><h2>Profile</h2></div></div>'+
     '<div class="panel pfpage"><div class="pfhead"><span class="avatar lg" aria-hidden="true">'+esc(ini)+'</span><div style="min-width:0"><h3>'+esc(b.n)+'</h3><span class="muted">'+(isPG(b.l)?'Postgraduate student':'Student')+' · '+n+' session'+(n===1?'':'s')+' booked</span></div></div>'+
     '<dl class="pfgrid">'+rows.map(function(r){ return '<div><dt>'+r[0]+'</dt><dd'+(r[2]?' class="mono"':'')+'>'+esc(r[1])+'</dd></div>'; }).join("")+'</dl>'+
-    '<div class="btns"><button class="btn" data-act="signOut">'+ICON.out+'<span style="margin-left:8px">Sign out</span></button></div></div>';
+    '<div class="btns">'+(st.ec?'':'<button class="btn" data-act="ecOpen">Change email</button>')+'<button class="btn" data-act="signOut">'+ICON.out+'<span style="margin-left:8px">Sign out</span></button></div></div>'+
+    (st.ec?emailChangeHTML():'');
 }
+/* ---------- Change email (Profile): new address -> 6-digit code sent there -> confirm ---------- */
+function emailChangeHTML(){
+  var E=st.ec, busy=E.busy;
+  var h='<form id="ecForm" class="panel" novalidate style="display:grid;gap:12px;margin-top:16px"><div><h3>Change your email</h3>'+
+    '<p class="muted" style="margin:6px 0 0;font-size:14px">Your session emails and joining links go to this address. You still sign in with your student number.</p></div>'+msgHTML(E.msg);
+  if(E.step===1){
+    h+='<div class="grid">'+
+      '<div class="field"><label for="ec-email">New email</label><input id="ec-email" data-ec="email" type="email" autocomplete="email" inputmode="email" value="'+esc(E.email)+'"></div>'+
+      '<div class="field"><label for="ec-email2">New email again</label><input id="ec-email2" data-ec="email2" type="email" autocomplete="email" inputmode="email" value="'+esc(E.email2)+'"></div>'+
+      '<div class="field span2"><label for="ec-pw">Your current password</label>'+pwBox("password",'<input id="ec-pw" data-ec="pw" type="password" autocomplete="current-password" value="'+esc(E.pw)+'">')+'<span class="hint">So nobody else can change your email on a shared computer.</span></div>'+
+      '</div><div class="btns"><button class="btn primary" type="submit"'+(busy?' disabled':'')+'>'+(busy?'Sending code…':'Send code')+'</button><button type="button" class="btn" data-act="ecCancel"'+(busy?' disabled':'')+'>Cancel</button></div>';
+  } else {
+    var wait=Math.max(0, Math.ceil((E.sentAt+60000-Date.now())/1000));
+    h+='<div class="notice">We sent a 6-digit code to <b>'+esc(E.to)+'</b>. It expires in 15 minutes. Check your spam folder if you can\'t see it.</div>'+
+      '<div class="field" style="max-width:240px"><label for="ec-code">Code</label><input id="ec-code" data-ec="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="'+esc(E.code)+'" style="letter-spacing:.3em;font-family:var(--mono,monospace)"></div>'+
+      '<div class="btns"><button class="btn primary" type="submit"'+(busy?' disabled':'')+'>'+(busy?'Checking…':'Confirm new email')+'</button>'+
+      '<button type="button" class="btn" data-act="ecResend"'+(busy||wait?' disabled':'')+'>'+(wait?'Resend code ('+wait+'s)':'Resend code')+'</button>'+
+      '<button type="button" class="linkbtn" data-act="ecBack"'+(busy?' disabled':'')+'>Use a different email</button></div>';
+  }
+  return h+'</form>';
+}
+async function ecRequest(){
+  var E=st.ec; if(!E || E.busy) return;
+  var a=String(E.email||"").trim().toLowerCase(), b2=String(E.email2||"").trim().toLowerCase();
+  var bad = !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a) ? "Enter a valid email address, for example name@gmail.com." :
+    a!==b2 ? "The two emails don't match. Type the same address in both boxes." :
+    a===String(st.booking.e||"").trim().toLowerCase() ? "That is already your email. Enter the new address." :
+    !E.pw ? "Enter your current password." : "";
+  if(bad){ E.msg={err:true,text:bad}; render(); return; }
+  E.busy=true; E.msg=null; render();
+  try{ var r=await API.profile("requestCode",{new_email:a,password:E.pw}); E.step=2; E.to=r.email||a; E.code=""; E.sentAt=Date.now(); E.msg=null; ecTick(); }
+  catch(err){ E.msg={err:true,text:errText(err,"Couldn't send the code. Please try again.")}; }
+  E.busy=false; render(); var f=document.getElementById(E.step===2?"ec-code":"ec-email"); if(f && E.step===2) f.focus();
+}
+async function ecConfirm(){
+  var E=st.ec; if(!E || E.busy) return;
+  var code=String(E.code||"").replace(/\D/g,"");
+  if(code.length!==6){ E.msg={err:true,text:"Enter the 6-digit code from the email."}; render(); return; }
+  E.busy=true; E.msg=null; render();
+  try{
+    var r=await API.profile("confirm",{code:code});
+    st.booking.e=r.email; st.ec=null;
+    st.msg={text:"Email updated to "+r.email+"."+(r.sent?" We've sent your session"+(r.sent===1?"":"s")+" and joining link"+(r.sent===1?"":"s")+" there.":"")};
+    render(); window.scrollTo(0,0); return;
+  }catch(err){ E.msg={err:true,text:errText(err,"Couldn't confirm the code. Please try again.")}; }
+  E.busy=false; render();
+}
+/* Counts down the "Resend code" button once a second while step 2 is open. */
+function ecTick(){ setTimeout(function(){ var E=st.ec; if(!E || E.step!==2 || st.view!=="profile") return; var b=document.querySelector("[data-act=ecResend]"); if(b && !E.busy){ var w=Math.max(0,Math.ceil((E.sentAt+60000-Date.now())/1000)); b.disabled=w>0; b.textContent=w?"Resend code ("+w+"s)":"Resend code"; if(!w) return; } ecTick(); }, 1000); }
 function renderMine(){
   var h=modeNotice()+msgHTML();
   var b=st.booking;
@@ -1804,7 +1855,7 @@ document.addEventListener("click",async function(e){
   if(a==="toList") return toList();
   if(a==="toMine") return go("mine");
   if(a==="findCollege"||a==="change"||a==="findGrasag"){ st.msg=null; st.view="dash"; render(); return toList(); }
-  if(a==="signOut"||a==="toAuth"){ if(API&&API.signOut) API.signOut(); var wasStaff=!!st.staff; st.booking=null; st.h=""; remember(null); setCollege(""); st.staff=null; st.sh=""; st.staffList=null; st.staffForm=null; try{ localStorage.removeItem("gw-staff"); }catch(e){} if(API&&API.live) st.seats={}; stopLive(); st.adminSession=null; st.links={}; st.lastBc={}; st.linkDraft={}; st.confirmBroadcast=null; st.bcRun=null; st.asg={sel:{}, open:{}, pick:{}, ask:null, run:null, res:null}; st.em=null; st.newSess=null; st.confirmDel=null; st.msg=null; st.pick=null; st.view="dash"; st.auth.tab="in"; render(); window.scrollTo(0,0); return; }
+  if(a==="signOut"||a==="toAuth"){ if(API&&API.signOut) API.signOut(); var wasStaff=!!st.staff; st.booking=null; st.h=""; remember(null); setCollege(""); st.staff=null; st.sh=""; st.staffList=null; st.staffForm=null; try{ localStorage.removeItem("gw-staff"); }catch(e){} if(API&&API.live) st.seats={}; stopLive(); st.adminSession=null; st.links={}; st.lastBc={}; st.linkDraft={}; st.confirmBroadcast=null; st.bcRun=null; st.asg={sel:{}, open:{}, pick:{}, ask:null, run:null, res:null}; st.em=null; st.ec=null; st.newSess=null; st.confirmDel=null; st.msg=null; st.pick=null; st.view="dash"; st.auth.tab="in"; render(); window.scrollTo(0,0); return; }
   if(a==="newStaff"){ st.staffForm={edit:false,name:"",email:"",role:"organiser",college:"",pw:""}; st.msg=null; render(); return; }
   if(a==="editStaff"){ var u=(st.staffList||[]).filter(function(x){return x.email===b.dataset.email;})[0]; if(u){ st.staffForm={edit:true,name:u.name,email:u.email,role:u.role,college:u.college||"",pw:""}; st.msg=null; render(); window.scrollTo(0,0); } return; }
   if(a==="cancelStaff"){ st.staffForm=null; render(); return; }
@@ -1821,6 +1872,10 @@ document.addEventListener("click",async function(e){
   }
   if(a==="askBroadcast"){ st.confirmBroadcast=b.dataset.sid; render(); return; }
   if(a==="askClose"){ st.confirmClose=b.dataset.sid; render(); return; }
+  if(a==="ecOpen"){ st.ec={step:1,email:"",email2:"",pw:"",code:"",busy:false,msg:null}; st.msg=null; render(); var fe=document.getElementById("ec-email"); if(fe) fe.focus(); return; }
+  if(a==="ecCancel"){ st.ec=null; render(); return; }
+  if(a==="ecBack"){ if(st.ec){ st.ec.step=1; st.ec.code=""; st.ec.msg=null; } render(); return; }
+  if(a==="ecResend"){ if(st.ec){ st.ec.email2=st.ec.email; return ecRequest(); } return; }
   if(a==="togglePast"){ st.showPast=!st.showPast; render(); return; }
   if(a==="emNo"){ emState().ask=false; render(); return; }
   if(a==="emSend") return emSend();
@@ -1883,6 +1938,7 @@ document.addEventListener("input",function(e){
   if(t.dataset && t.dataset.emall!=null){ var E4=emState(); COLLEGES.forEach(function(c){ E4.cols[c.id]=!!t.checked; }); E4.ask=false; render(); return; }
   if(t.dataset && t.dataset.emcol){ var E5=emState(); E5.cols[t.dataset.emcol]=!!t.checked; E5.ask=false; render(); return; }
   if(t.dataset && t.dataset.em){ var E6=emState(), wasAsk=E6.ask; E6[t.dataset.em]=t.value; E6.ask=false; if(t.dataset.em==="filter" || wasAsk) render(); else emLive(); return; }
+  if(t.dataset && t.dataset.ec && st.ec){ st.ec[t.dataset.ec]=t.value; return; }
   if(t.dataset && t.dataset.ns && st.newSess){ st.newSess[t.dataset.ns]=t.value; return; }
   if(t.dataset && t.dataset.bcresend){ st.bcResend=st.bcResend||{}; st.bcResend[t.dataset.bcresend]=!!t.checked; render(); return; }
   if(t.dataset && t.dataset.bcaud){ st.bcAud=st.bcAud||{}; st.bcAud[t.dataset.bcaud]=t.value; st.confirmBroadcast=null; render(); return; }
@@ -1899,6 +1955,7 @@ document.addEventListener("submit",function(e){
   if(id==="staffForm") return saveStaffForm();
   if(id==="linkForm") return submitLink();
   if(id==="newSessForm") return createSession();
+  if(id==="ecForm") return st.ec && st.ec.step===2 ? ecConfirm() : ecRequest();
   if(id==="emailForm"){ var E3=emState(), bad=emCheck(); if(bad){ E3.msg={err:true,text:bad}; render(); window.scrollTo(0,0); return; } E3.msg=null; E3.ask=true; render(); return; }
 });
 
