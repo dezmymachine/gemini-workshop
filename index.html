@@ -865,13 +865,12 @@ function renderProfile(){
 /* ---------- Change email (Profile): new address -> 6-digit code sent there -> confirm ---------- */
 function emailChangeHTML(){
   var E=st.ec, busy=E.busy;
-  var h='<form id="ecForm" class="panel" novalidate style="display:grid;gap:12px;margin-top:16px"><div><h3>Change your email</h3>'+
-    '<p class="muted" style="margin:6px 0 0;font-size:14px">Your session emails and joining links go to this address. You still sign in with your student number.</p></div>'+msgHTML(E.msg);
+  var h='<form id="ecForm" class="panel" novalidate style="display:grid;gap:12px;margin-top:16px"><div><h3>Change your email</h3></div>'+msgHTML(E.msg);
   if(E.step===1){
     h+='<div class="grid">'+
       '<div class="field"><label for="ec-email">New email</label><input id="ec-email" data-ec="email" type="email" autocomplete="email" inputmode="email" value="'+esc(E.email)+'"></div>'+
       '<div class="field"><label for="ec-email2">New email again</label><input id="ec-email2" data-ec="email2" type="email" autocomplete="email" inputmode="email" value="'+esc(E.email2)+'"></div>'+
-      '<div class="field span2"><label for="ec-pw">Your current password</label>'+pwBox("password",'<input id="ec-pw" data-ec="pw" type="password" autocomplete="current-password" value="'+esc(E.pw)+'">')+'<span class="hint">So nobody else can change your email on a shared computer.</span></div>'+
+      '<div class="field span2"><label for="ec-pw">Your current password</label>'+pwBox("password",'<input id="ec-pw" data-ec="pw" type="password" autocomplete="current-password" value="'+esc(E.pw)+'">')+'</div>'+
       '</div><div class="btns"><button class="btn primary" type="submit"'+(busy?' disabled':'')+'>'+(busy?'Sending code…':'Send code')+'</button><button type="button" class="btn" data-act="ecCancel"'+(busy?' disabled':'')+'>Cancel</button></div>';
   } else {
     var wait=Math.max(0, Math.ceil((E.sentAt+60000-Date.now())/1000));
