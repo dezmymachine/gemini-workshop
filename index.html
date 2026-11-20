@@ -709,6 +709,7 @@ function metaRow(s){
 function audience(s){ return s.g ? 'For postgraduate students (GRASAG)' : s.o ? 'Open to students from every college' : 'For '+TRACKS[s.track].label+' students'; }
 function bookState(s){
   if(mine(s.id)) return {label:"Booked", dis:true, ok:true};
+  if(s.end<=Date.now()) return {label:"Ended", dis:true};
   if(s.closed) return {label:"Closed", dis:true, closed:true};
   if(left(s.id)===0) return {label:"Session full", dis:true, full:true};
   var b=st.booking;
@@ -805,16 +806,26 @@ function renderDash(){
   if(!st.myCol) return h+pickerHTML()+'</section>';
   var list=vis.filter(matchesQ);
   var t=TRACKS[trackOf(st.myCol)];
-  h+='<div class="sec-head"><div><h2>Your sessions</h2><p>'+esc(collegeName(st.myCol))+' · '+esc(t.name)+' · '+esc(DAYS[t.day].date)+(st.myPG?' · plus GRASAG sessions':'')+'</p></div>'+
+  h+='<div class="sec-head"><div><h2>Your sessions</h2><p>'+esc(collegeName(st.myCol))+': your college\'s sessions'+(st.myPG?', GRASAG sessions':'')+' and open sessions for every college.</p></div>'+
     (st.booking?'':'<button class="btn sm" data-act="changeCol">Change college</button>')+'</div>';
   if(st.q) h+='<p class="muted" style="margin:0">Showing results for “'+esc(st.q)+'”.</p>';
-  var col=list.filter(function(s){return !s.g && !s.o;}), gr=list.filter(function(s){return s.g;}), op=list.filter(function(s){return s.o && s.end>Date.now();});
+  /* Newest first: what the student can still book comes first (college, GRASAG and open sessions together, soonest
+     first), then upcoming sessions that are full or closed, and finished sessions last, folded away. */
+  var now=Date.now(), byStart=function(a,c){ return a.start-c.start || (a.o-c.o) || (a.g-c.g); };
+  var upcoming=list.filter(function(s){ return s.end>now; });
+  var avail=upcoming.filter(function(s){ return mine(s.id) || canBookInto(s.id); }).sort(byStart);
+  var unavail=upcoming.filter(function(s){ return avail.indexOf(s)<0; }).sort(byStart);
+  var past=list.filter(function(s){ return s.end<=now; }).sort(function(a,c){ return c.start-a.start; });
   if(!list.length) h+='<div class="empty">No sessions match your search.</div>';
-  var colAll=vis.filter(function(s){return !s.g && !s.o;});
-  if(st.booking && !st.booking.s && colAll.length && colAll.every(function(s){return !canBookInto(s.id);})) h+='<div class="notice err" role="alert">All sessions for your college are full or closed. Please contact the workshop organisers. They can tell you if a seat opens up.</div>';
-  if(col.length) h+='<div class="list">'+col.map(hcardHTML).join("")+'</div>';
-  if(gr.length) h+='<div class="sec-head" style="margin-top:8px"><div><h2>GRASAG sessions</h2><p>One dedicated postgraduate session on Tuesday, Wednesday and Thursday. You can book one in addition to your college session.</p></div></div><div class="list">'+gr.map(hcardHTML).join("")+'</div>';
-  if(op.length) h+='<div class="sec-head" style="margin-top:8px"><div><h2>Open sessions</h2><p>Open to students from every college. You can book one in addition to your college session.</p></div></div><div class="list">'+op.map(hcardHTML).join("")+'</div>';
+  var colUp=vis.filter(function(s){ return !s.g && !s.o && s.end>now; });
+  if(st.booking && !st.booking.s && colUp.length && colUp.every(function(s){return !canBookInto(s.id);})) h+='<div class="notice err" role="alert">All sessions for your college are full or closed. Please contact the workshop organisers. They can tell you if a seat opens up.</div>';
+  var extra=[]; if(upcoming.some(function(s){ return s.o; })) extra.push('open sessions for every college'); if(upcoming.some(function(s){ return s.g; })) extra.push('GRASAG sessions');
+  if(avail.length) h+='<div class="sec-head"><div><h2>Available to book</h2><p>Soonest first'+(extra.length?', including '+esc(extra.join(' and ')):'')+'. Open and GRASAG sessions are an extra seat next to your college session.</p></div></div><div class="list">'+avail.map(hcardHTML).join("")+'</div>';
+  else if(list.length && upcoming.length) h+='<div class="empty">No sessions are open for booking right now. Check back later.</div>';
+  else if(list.length) h+='<div class="empty">There are no upcoming sessions right now. New sessions will appear here.</div>';
+  if(unavail.length) h+='<div class="sec-head" style="margin-top:8px"><div><h2>Full or closed</h2><p>Upcoming sessions that are not taking new bookings.</p></div></div><div class="list">'+unavail.map(hcardHTML).join("")+'</div>';
+  if(past.length) h+='<div class="btns" style="margin-top:8px"><button class="btn sm" data-act="togglePast" aria-expanded="'+(st.showPast?'true':'false')+'">'+(st.showPast?'Hide past sessions':'Show '+past.length+' past session'+(past.length===1?'':'s'))+'</button></div>'+
+    (st.showPast?'<div class="list">'+past.map(hcardHTML).join("")+'</div>':'');
   return h+'</section>';
 }
 function pickerHTML(){
@@ -1810,6 +1821,7 @@ document.addEventListener("click",async function(e){
   }
   if(a==="askBroadcast"){ st.confirmBroadcast=b.dataset.sid; render(); return; }
   if(a==="askClose"){ st.confirmClose=b.dataset.sid; render(); return; }
+  if(a==="togglePast"){ st.showPast=!st.showPast; render(); return; }
   if(a==="emNo"){ emState().ask=false; render(); return; }
   if(a==="emSend") return emSend();
   if(a==="emReload"){ loadCampaigns(); return; }
